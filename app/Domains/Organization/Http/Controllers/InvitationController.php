@@ -30,7 +30,9 @@ final class InvitationController extends Controller
             Response::HTTP_FORBIDDEN,
         );
 
-        return InvitationResource::collection($organization->invitations()->latest()->get());
+        return InvitationResource::collection(
+            $organization->invitations()->latest()->paginate($this->perPage($request)),
+        );
     }
 
     public function store(InviteMemberRequest $request, Organization $organization): JsonResponse

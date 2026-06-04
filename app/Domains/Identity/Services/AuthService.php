@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace App\Domains\Auth\Services;
+namespace App\Domains\Identity\Services;
 
-use App\Domains\Auth\DTOs\LoginData;
-use App\Domains\Auth\DTOs\RegisterUserData;
-use App\Domains\Auth\Events\UserRegistered;
+use App\Domains\Identity\DTOs\LoginData;
+use App\Domains\Identity\DTOs\RegisterUserData;
+use App\Domains\Identity\Events\UserRegistered;
 use App\Models\User;
 use Illuminate\Auth\AuthManager;
 use Illuminate\Database\DatabaseManager;

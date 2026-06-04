@@ -42,6 +42,13 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        // NOTE: Do NOT declare an explicit `sanctum` guard here. Sanctum
+        // registers its guard at runtime, so `auth:sanctum` already works. If a
+        // second guard backed by the same provider is added, Spatie resolves
+        // roles/permissions under the active request guard (`sanctum`) while the
+        // role catalogue is stored under `web` — causing RoleDoesNotExist. All
+        // RBAC is intentionally anchored to the single `web` guard.
     ],
 
     /*

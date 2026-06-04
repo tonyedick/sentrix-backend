@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Organization\Listeners;
 
-use App\Domains\Auth\Events\UserRegistered;
+use App\Domains\Identity\Events\UserRegistered;
 use App\Domains\Organization\DTOs\CreateOrganizationData;
 use App\Domains\Organization\Services\OrganizationService;
 use Illuminate\Contracts\Queue\ShouldQueue;

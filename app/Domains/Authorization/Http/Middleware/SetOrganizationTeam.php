@@ -40,7 +40,9 @@ final class SetOrganizationTeam
             return $next($request);
         }
 
-        if (! $user->belongsToOrganization($organizationId)) {
+        // Platform-global SuperAdmins may act within any organization; everyone
+        // else must be a member of the organization they are addressing.
+        if (! $user->isSuperAdmin() && ! $user->belongsToOrganization($organizationId)) {
             abort(Response::HTTP_FORBIDDEN, 'You do not belong to this organization.');
         }
 

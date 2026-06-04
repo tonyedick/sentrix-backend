@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use App\Domains\Authorization\Database\Seeders\PermissionCatalogueSeeder;
+use App\Domains\Authorization\Services\RoleService;
 use App\Domains\Organization\DTOs\CreateOrganizationData;
 use App\Domains\Organization\Services\OrganizationService;
 use App\Models\User;
@@ -18,12 +19,21 @@ class DatabaseSeeder extends Seeder
      * NOTE: WithoutModelEvents is intentionally NOT used — the HasUuid trait
      * generates primary keys on the model `creating` event.
      */
-    public function run(OrganizationService $organizations): void
+    public function run(OrganizationService $organizations, RoleService $roles): void
     {
-        // 1. Global permission catalogue.
+        // 1. Global permission catalogue + system roles (SuperAdmin).
         $this->call(PermissionCatalogueSeeder::class);
 
-        // 2. A demo user with their own organization (owner role + default roles).
+        // 2. A platform-global SuperAdmin operator (no organization required).
+        $admin = User::factory()->create([
+            'name' => 'Platform Admin',
+            'email' => 'admin@sentrix.test',
+        ]);
+
+        $roles->assignSuperAdmin($admin);
+
+        // 3. A demo user who owns an organization (provisioned with the default
+        //    organization-scoped role set; the creator becomes OrganizationAdmin).
         $user = User::factory()->create([
             'name' => 'Test User',
             'email' => 'test@example.com',

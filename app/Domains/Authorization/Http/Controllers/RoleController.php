@@ -12,6 +12,7 @@ use App\Domains\Authorization\Services\RoleService;
 use App\Domains\Organization\Models\Organization;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -23,9 +24,11 @@ final class RoleController extends Controller
 {
     public function __construct(private readonly RoleService $roles) {}
 
-    public function index(Organization $organization): AnonymousResourceCollection
+    public function index(Request $request, Organization $organization): AnonymousResourceCollection
     {
-        return RoleResource::collection($this->roles->listForOrganization($organization));
+        return RoleResource::collection(
+            $this->roles->listForOrganization($organization, $this->perPage($request)),
+        );
     }
 
     public function store(StoreRoleRequest $request, Organization $organization): JsonResponse

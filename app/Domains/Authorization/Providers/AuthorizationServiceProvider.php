@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Authorization\Providers;
 
 use App\Domains\Authorization\Http\Middleware\SetOrganizationTeam;
-use App\Domains\Authorization\Support\Enums\DefaultRole;
+use App\Domains\Organization\Models\Organization;
 use App\Domains\Shared\Providers\DomainServiceProvider;
 use App\Models\User;
 use Illuminate\Support\Facades\Gate;
@@ -17,10 +17,26 @@ final class AuthorizationServiceProvider extends DomainServiceProvider
     {
         Route::aliasMiddleware('organization.team', SetOrganizationTeam::class);
 
-        // Organization owners implicitly hold every permission within their own
-        // organization (the team context is already set by middleware).
         Gate::before(static function (User $user, string $ability): ?bool {
-            return $user->hasRole(DefaultRole::Owner->value) ? true : null;
+            // 1. Platform-global SuperAdmin holds every ability everywhere,
+            //    regardless of the active organization (team) context.
+            if ($user->isSuperAdmin()) {
+                return true;
+            }
+
+            // 2. An organization owner implicitly holds every ability within
+            //    their own organization. The active organization is resolved by
+            //    the SetOrganizationTeam middleware.
+            if (app()->bound('organization.current')) {
+                $organization = app('organization.current');
+
+                if ($organization instanceof Organization
+                    && $organization->owner_id === $user->getKey()) {
+                    return true;
+                }
+            }
+
+            return null;
         });
 
         $this->loadDomainApiRoutes();

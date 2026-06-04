@@ -26,7 +26,7 @@ final class AuthenticationTest extends TestCase
         ]);
 
         $response->assertCreated()
-            ->assertJsonStructure(['user' => ['id', 'email'], 'token']);
+            ->assertJsonStructure(['success', 'message', 'data' => ['user' => ['id', 'email'], 'token']]);
 
         $this->assertDatabaseHas('users', ['email' => 'ada@example.com']);
     }
@@ -44,7 +44,7 @@ final class AuthenticationTest extends TestCase
             'device_name' => 'pixel-9',
         ]);
 
-        $response->assertOk()->assertJsonStructure(['user', 'token']);
+        $response->assertOk()->assertJsonStructure(['success', 'message', 'data' => ['user', 'token']]);
     }
 
     public function test_invalid_credentials_are_rejected(): void

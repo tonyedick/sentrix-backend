@@ -27,7 +27,14 @@ final class MemberController extends Controller
             Response::HTTP_FORBIDDEN,
         );
 
-        return MemberResource::collection($organization->members()->get());
+        // Eager-load roles to avoid an N+1 when MemberResource resolves role
+        // names. The team context is already set by the organization.team
+        // middleware, so the roles relation resolves within this organization.
+        $members = $organization->members()
+            ->with('roles')
+            ->paginate($this->perPage($request));
+
+        return MemberResource::collection($members);
     }
 
     public function update(UpdateMemberRequest $request, Organization $organization, User $user): MemberResource

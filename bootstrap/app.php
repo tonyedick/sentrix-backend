@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\WrapApiResponse;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -17,6 +18,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // Enables stateful (cookie/session) auth for the Inertia SPA on /api/*
         // while still allowing Sanctum bearer tokens for React Native clients.
         $middleware->statefulApi();
+
+        // Normalise every API JSON response into the platform envelope.
+        $middleware->appendToGroup('api', WrapApiResponse::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

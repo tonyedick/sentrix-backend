@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Domains\Auth\Events;
+namespace App\Domains\Identity\Events;
 
 use App\Models\User;
 use Illuminate\Foundation\Events\Dispatchable;

@@ -26,7 +26,7 @@ final class OrganizationController extends Controller
         $organizations = $request->user()
             ->organizations()
             ->withCount('members')
-            ->get();
+            ->paginate($this->perPage($request));
 
         return OrganizationResource::collection($organizations);
     }

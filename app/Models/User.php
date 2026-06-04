@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Domains\Authorization\Support\Enums\SystemRole;
 use App\Domains\Organization\Models\Organization;
 use App\Domains\Organization\Models\OrganizationMembership;
 use App\Domains\Shared\Concerns\HasUuid;
@@ -15,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
@@ -84,5 +86,29 @@ class User extends Authenticatable
         $id = $organization instanceof Organization ? $organization->getKey() : $organization;
 
         return $this->organizations()->whereKey($id)->exists();
+    }
+
+    /**
+     * Whether the user holds the platform-global SuperAdmin role.
+     *
+     * Checked team-agnostically (team id NULL) so it resolves the same way
+     * regardless of the active organization context. Memoised per request via
+     * once() because Gate::before invokes it on every authorization check.
+     */
+    public function isSuperAdmin(): bool
+    {
+        return once(function (): bool {
+            $tables = config('permission.table_names');
+            $columns = config('permission.column_names');
+            $rolePivot = $columns['role_pivot_key'] ?? 'role_id';
+
+            return DB::table($tables['model_has_roles'])
+                ->join($tables['roles'], $tables['roles'].'.id', '=', $tables['model_has_roles'].'.'.$rolePivot)
+                ->where($tables['model_has_roles'].'.model_type', $this->getMorphClass())
+                ->where($tables['model_has_roles'].'.'.$columns['model_morph_key'], $this->getKey())
+                ->whereNull($tables['model_has_roles'].'.'.$columns['team_foreign_key'])
+                ->where($tables['roles'].'.name', SystemRole::SuperAdmin->value)
+                ->exists();
+        });
     }
 }

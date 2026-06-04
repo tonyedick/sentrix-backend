@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Domains\Auth\Http\Controllers;
+namespace App\Domains\Identity\Http\Controllers;
 
-use App\Domains\Auth\Http\Resources\UserResource;
+use App\Domains\Identity\Http\Resources\UserResource;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-use App\Domains\Auth\Http\Controllers\AuthenticatedSessionController;
-use App\Domains\Auth\Http\Controllers\CurrentUserController;
-use App\Domains\Auth\Http\Controllers\RegisteredUserController;
+use App\Domains\Identity\Http\Controllers\AuthenticatedSessionController;
+use App\Domains\Identity\Http\Controllers\CurrentUserController;
+use App\Domains\Identity\Http\Controllers\RegisteredUserController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1/auth')->group(function (): void {

@@ -6,7 +6,7 @@ namespace Tests\Feature\Organization;
 
 use App\Domains\Authorization\Database\Seeders\PermissionCatalogueSeeder;
 use App\Domains\Authorization\Support\Enums\DefaultPermission;
-use App\Domains\Authorization\Support\Enums\DefaultRole;
+use App\Domains\Authorization\Support\Enums\OrganizationRole;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -33,7 +33,7 @@ final class OrganizationRbacTest extends TestCase
         $organizationId = $response->json('data.id');
 
         // All default roles exist, scoped to this organization.
-        foreach (DefaultRole::values() as $role) {
+        foreach (OrganizationRole::values() as $role) {
             $this->assertDatabaseHas('roles', [
                 'name' => $role,
                 'organization_id' => $organizationId,
@@ -60,7 +60,7 @@ final class OrganizationRbacTest extends TestCase
         $this->actingAs($owner, 'sanctum')
             ->postJson("/api/v1/organizations/{$organizationId}/invitations", [
                 'email' => 'new@example.com',
-                'role' => DefaultRole::Member->value,
+                'role' => OrganizationRole::User->value,
             ])
             ->assertCreated()
             ->assertJsonPath('data.status', 'pending');
@@ -95,14 +95,14 @@ final class OrganizationRbacTest extends TestCase
             ->postJson('/api/v1/organizations', ['name' => 'Acme Inc'])
             ->json('data.id');
 
-        // Add the member with the low-privilege "member" role.
+        // Add the member with the low-privilege "User" role.
         app(\App\Domains\Organization\Services\MembershipService::class)
-            ->addMember(\App\Domains\Organization\Models\Organization::find($organizationId), $member, DefaultRole::Member->value);
+            ->addMember(\App\Domains\Organization\Models\Organization::find($organizationId), $member, OrganizationRole::User->value);
 
         $this->actingAs($member, 'sanctum')
             ->postJson("/api/v1/organizations/{$organizationId}/invitations", [
                 'email' => 'x@example.com',
-                'role' => DefaultRole::Member->value,
+                'role' => OrganizationRole::User->value,
             ])
             ->assertForbidden();
 

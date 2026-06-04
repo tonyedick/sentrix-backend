@@ -91,19 +91,22 @@ return new class extends Migration
                 ->cascadeOnDelete();
 
             if ($teams) {
-                $table->uuid($columnNames['team_foreign_key']);
+                // The team key is NULLABLE on role assignments so platform-global
+                // roles (e.g. SuperAdmin) can be assigned with a NULL
+                // organization_id. The team key is therefore excluded from the
+                // primary key — role_id is already team-specific (each
+                // organization owns distinct role rows), so
+                // (role_id, model_id, model_type) uniquely identifies an
+                // assignment. Organization-scoped assignments still store their
+                // organization_id, so team filtering is unaffected.
+                $table->uuid($columnNames['team_foreign_key'])->nullable();
                 $table->index($columnNames['team_foreign_key'], 'model_has_roles_team_foreign_key_index');
-
-                $table->primary(
-                    [$columnNames['team_foreign_key'], $pivotRole, $columnNames['model_morph_key'], 'model_type'],
-                    'model_has_roles_role_model_type_primary'
-                );
-            } else {
-                $table->primary(
-                    [$pivotRole, $columnNames['model_morph_key'], 'model_type'],
-                    'model_has_roles_role_model_type_primary'
-                );
             }
+
+            $table->primary(
+                [$pivotRole, $columnNames['model_morph_key'], 'model_type'],
+                'model_has_roles_role_model_type_primary'
+            );
         });
 
         Schema::create($tableNames['role_has_permissions'], static function (Blueprint $table) use ($tableNames, $pivotRole, $pivotPermission) {

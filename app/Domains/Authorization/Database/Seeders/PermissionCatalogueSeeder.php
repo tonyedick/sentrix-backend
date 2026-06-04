@@ -11,8 +11,10 @@ final class PermissionCatalogueSeeder extends Seeder
 {
     public function run(RoleService $roles): void
     {
-        // Seeds the global permission catalogue. Roles are provisioned per
+        // Seeds the global permission catalogue and platform-global system roles
+        // (e.g. SuperAdmin). Organization-scoped roles are provisioned per
         // organization at creation time, not here.
         $roles->syncPermissionCatalogue();
+        $roles->ensureSystemRoles();
     }
 }

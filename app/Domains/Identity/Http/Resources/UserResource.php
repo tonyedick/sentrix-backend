@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Domains\Auth\Http\Resources;
+namespace App\Domains\Identity\Http\Resources;
 
 use App\Domains\Organization\Http\Resources\OrganizationResource;
 use App\Models\User;

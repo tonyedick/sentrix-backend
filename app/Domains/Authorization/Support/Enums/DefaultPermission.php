@@ -20,7 +20,6 @@ enum DefaultPermission: string
     case MembersRemove = 'members.remove';
 
     case RolesManage = 'roles.manage';
-    case BillingManage = 'billing.manage';
 
     /**
      * @return list<string>

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Domains\Auth\DTOs;
+namespace App\Domains\Identity\DTOs;
 
-use App\Domains\Auth\Http\Requests\LoginRequest;
+use App\Domains\Identity\Http\Requests\LoginRequest;
 use App\Domains\Shared\Data\DataTransferObject;
 
 final class LoginData extends DataTransferObject

@@ -6,6 +6,7 @@ namespace App\Domains\Authorization\Http\Controllers;
 
 use App\Domains\Authorization\Http\Resources\PermissionResource;
 use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -15,10 +16,12 @@ use Spatie\Permission\PermissionRegistrar;
  */
 final class PermissionController extends Controller
 {
-    public function index(PermissionRegistrar $registrar): AnonymousResourceCollection
+    public function index(Request $request, PermissionRegistrar $registrar): AnonymousResourceCollection
     {
         $permissionClass = $registrar->getPermissionClass();
 
-        return PermissionResource::collection($permissionClass::all());
+        return PermissionResource::collection(
+            $permissionClass::query()->paginate($this->perPage($request)),
+        );
     }
 }

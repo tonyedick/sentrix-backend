@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace App\Domains\Auth\Http\Controllers;
+namespace App\Domains\Identity\Http\Controllers;
 
-use App\Domains\Auth\DTOs\LoginData;
-use App\Domains\Auth\Http\Requests\LoginRequest;
-use App\Domains\Auth\Http\Resources\UserResource;
-use App\Domains\Auth\Services\AuthService;
+use App\Domains\Identity\DTOs\LoginData;
+use App\Domains\Identity\Http\Requests\LoginRequest;
+use App\Domains\Identity\Http\Resources\UserResource;
+use App\Domains\Identity\Services\AuthService;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;

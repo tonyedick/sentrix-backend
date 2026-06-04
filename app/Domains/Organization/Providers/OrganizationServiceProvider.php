@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Organization\Providers;
 
-use App\Domains\Auth\Events\UserRegistered;
+use App\Domains\Identity\Events\UserRegistered;
 use App\Domains\Organization\Events\MemberInvited;
 use App\Domains\Organization\Listeners\CreateDefaultOrganization;
 use App\Domains\Organization\Listeners\SendInvitationNotification;

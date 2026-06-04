@@ -6,9 +6,11 @@ namespace App\Domains\Authorization\Services;
 
 use App\Domains\Authorization\Models\Role;
 use App\Domains\Authorization\Support\Enums\DefaultPermission;
-use App\Domains\Authorization\Support\Enums\DefaultRole;
+use App\Domains\Authorization\Support\Enums\OrganizationRole;
+use App\Domains\Authorization\Support\Enums\SystemRole;
 use App\Domains\Organization\Models\Organization;
-use Illuminate\Database\Eloquent\Collection;
+use App\Models\User;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -37,6 +39,38 @@ final readonly class RoleService
     }
 
     /**
+     * Ensure the platform-global SuperAdmin role exists (team id NULL).
+     * Idempotent. Run from the permission catalogue seeder.
+     */
+    public function ensureSystemRoles(): void
+    {
+        $previous = $this->registrar->getPermissionsTeamId();
+        $this->registrar->setPermissionsTeamId(null);
+
+        foreach (SystemRole::values() as $name) {
+            Role::findOrCreate($name, self::GUARD);
+        }
+
+        $this->registrar->setPermissionsTeamId($previous);
+        $this->registrar->forgetCachedPermissions();
+    }
+
+    /**
+     * Grant a user the platform-global SuperAdmin role (assigned with a NULL
+     * team id so it transcends every organization).
+     */
+    public function assignSuperAdmin(User $user): void
+    {
+        $previous = $this->registrar->getPermissionsTeamId();
+        $this->registrar->setPermissionsTeamId(null);
+
+        $user->assignRole(SystemRole::SuperAdmin->value);
+
+        $this->registrar->setPermissionsTeamId($previous);
+        $this->registrar->forgetCachedPermissions();
+    }
+
+    /**
      * Create the standard role set for a freshly created organization.
      */
     public function provisionDefaultRoles(Organization $organization): void
@@ -44,7 +78,7 @@ final readonly class RoleService
         DB::transaction(function () use ($organization): void {
             $this->registrar->setPermissionsTeamId($organization->getKey());
 
-            foreach (DefaultRole::cases() as $default) {
+            foreach (OrganizationRole::cases() as $default) {
                 $role = Role::findOrCreate($default->value, self::GUARD);
                 $role->syncPermissions($default->permissions());
             }
@@ -54,13 +88,13 @@ final readonly class RoleService
     }
 
     /**
-     * @return Collection<int, Role>
+     * @return LengthAwarePaginator<int, Role>
      */
-    public function listForOrganization(Organization $organization): Collection
+    public function listForOrganization(Organization $organization, int $perPage): LengthAwarePaginator
     {
         $this->registrar->setPermissionsTeamId($organization->getKey());
 
-        return Role::with('permissions')->get();
+        return Role::with('permissions')->paginate($perPage);
     }
 
     /**

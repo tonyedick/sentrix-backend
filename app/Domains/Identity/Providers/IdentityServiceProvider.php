@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace App\Domains\Auth\Providers;
+namespace App\Domains\Identity\Providers;
 
 use App\Domains\Shared\Providers\DomainServiceProvider;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 
-final class AuthDomainServiceProvider extends DomainServiceProvider
+final class IdentityServiceProvider extends DomainServiceProvider
 {
     public function boot(): void
     {

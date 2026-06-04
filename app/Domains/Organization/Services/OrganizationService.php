@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Organization\Services;
 
 use App\Domains\Authorization\Services\RoleService;
-use App\Domains\Authorization\Support\Enums\DefaultRole;
+use App\Domains\Authorization\Support\Enums\OrganizationRole;
 use App\Domains\Organization\DTOs\CreateOrganizationData;
 use App\Domains\Organization\Events\OrganizationCreated;
 use App\Domains\Organization\Models\Organization;
@@ -36,7 +36,7 @@ final readonly class OrganizationService
             // Roles are team-scoped, so they must exist before assigning the owner.
             $this->roles->provisionDefaultRoles($organization);
 
-            $this->memberships->addMember($organization, $data->owner, DefaultRole::Owner->value);
+            $this->memberships->addMember($organization, $data->owner, OrganizationRole::owner()->value);
 
             $data->owner->forceFill(['current_organization_id' => $organization->getKey()])->save();
 
