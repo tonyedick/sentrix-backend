@@ -8,7 +8,8 @@ use App\Domains\Organization\Http\Controllers\OrganizationController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:sanctum')->prefix('v1')->group(function (): void {
-    // Organization collection — no active team context required.
+    // Organization collection — no active team context required. Creating an
+    // organization stays open so onboarding is never blocked by verification.
     Route::get('organizations', [OrganizationController::class, 'index'])->name('organizations.index');
     Route::post('organizations', [OrganizationController::class, 'store'])->name('organizations.store');
 
@@ -18,16 +19,22 @@ Route::middleware('auth:sanctum')->prefix('v1')->group(function (): void {
     // Organization-scoped endpoints — team context resolved + membership enforced.
     Route::middleware('organization.team')->prefix('organizations/{organization}')->group(function (): void {
         Route::get('/', [OrganizationController::class, 'show'])->name('organizations.show');
-        Route::patch('/', [OrganizationController::class, 'update'])->name('organizations.update');
-        Route::delete('/', [OrganizationController::class, 'destroy'])->name('organizations.destroy');
         Route::post('switch', [OrganizationController::class, 'switch'])->name('organizations.switch');
-
         Route::get('members', [MemberController::class, 'index'])->name('members.index');
-        Route::patch('members/{user}', [MemberController::class, 'update'])->name('members.update');
-        Route::delete('members/{user}', [MemberController::class, 'destroy'])->name('members.destroy');
-
         Route::get('invitations', [InvitationController::class, 'index'])->name('invitations.index');
-        Route::post('invitations', [InvitationController::class, 'store'])->name('invitations.store');
-        Route::delete('invitations/{invitation}', [InvitationController::class, 'destroy'])->name('invitations.destroy');
+
+        // Administrative writes additionally require a verified email. Life-safety
+        // and read endpoints intentionally do not (see ARCHITECTURE.md).
+        Route::middleware('verified')->group(function (): void {
+            Route::patch('/', [OrganizationController::class, 'update'])->name('organizations.update');
+            Route::delete('/', [OrganizationController::class, 'destroy'])->name('organizations.destroy');
+            Route::post('transfer-ownership', [OrganizationController::class, 'transferOwnership'])->name('organizations.transfer-ownership');
+
+            Route::patch('members/{user}', [MemberController::class, 'update'])->name('members.update');
+            Route::delete('members/{user}', [MemberController::class, 'destroy'])->name('members.destroy');
+
+            Route::post('invitations', [InvitationController::class, 'store'])->name('invitations.store');
+            Route::delete('invitations/{invitation}', [InvitationController::class, 'destroy'])->name('invitations.destroy');
+        });
     });
 });

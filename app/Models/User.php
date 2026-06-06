@@ -9,6 +9,8 @@ use App\Domains\Organization\Models\Organization;
 use App\Domains\Organization\Models\OrganizationMembership;
 use App\Domains\Shared\Concerns\HasUuid;
 use Database\Factories\UserFactory;
+use Illuminate\Auth\MustVerifyEmail as MustVerifyEmailTrait;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -20,13 +22,14 @@ use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens;
     use HasFactory;
     use HasRoles;
     use HasUuid;
+    use MustVerifyEmailTrait;
     use Notifiable;
     use SoftDeletes;
 

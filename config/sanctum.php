@@ -50,7 +50,10 @@ return [
     |
     */
 
-    'expiration' => null,
+    // Env-driven so ops can enforce mobile token expiry without a deploy.
+    // Null = non-expiring (default — avoids logging responders out mid-incident).
+    // When set, schedule `sanctum:prune-expired` to purge stale rows.
+    'expiration' => env('SANCTUM_EXPIRATION'),
 
     /*
     |--------------------------------------------------------------------------

@@ -199,7 +199,9 @@ return [
     'defaults' => [
         'supervisor-1' => [
             'connection' => 'redis',
-            'queue' => ['default'],
+            // Listed highest-priority first: life-safety broadcasts (emergencies,
+            // incident escalations) are drained ahead of routine work.
+            'queue' => ['critical', 'default'],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
             'maxProcesses' => 1,

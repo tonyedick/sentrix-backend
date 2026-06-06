@@ -56,6 +56,30 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Front-end URL
+    |--------------------------------------------------------------------------
+    |
+    | Base URL of the user-facing front-ends (admin dashboard / mobile deep
+    | links). Used to build verification, password-reset and invitation links
+    | embedded in queued notifications.
+    |
+    */
+
+    'frontend_url' => env('APP_FRONTEND_URL', env('APP_URL', 'http://localhost')),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Application Version
+    |--------------------------------------------------------------------------
+    |
+    | Surfaced by the /api/v1/health endpoint and useful for support/debugging.
+    |
+    */
+
+    'version' => env('APP_VERSION', '1.0.0'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

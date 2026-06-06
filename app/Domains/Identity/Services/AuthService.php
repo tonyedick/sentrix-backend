@@ -46,6 +46,10 @@ final readonly class AuthService
     /**
      * Verify credentials and return the matching user, or throw a 422.
      *
+     * Enumeration-resistant: when the account does not exist we still perform an
+     * equivalent bcrypt operation so response timing does not reveal whether the
+     * email is registered, and the error is identical to a wrong password.
+     *
      * @throws ValidationException
      */
     public function verifyCredentials(LoginData $data): User
@@ -53,13 +57,28 @@ final readonly class AuthService
         /** @var User|null $user */
         $user = User::where('email', $data->email)->first();
 
-        if (! $user || ! Hash::check($data->password, $user->password)) {
-            throw ValidationException::withMessages([
-                'email' => [__('auth.failed')],
-            ]);
+        if ($user === null) {
+            // Equalise timing with the password-check branch below.
+            Hash::make($data->password);
+
+            $this->failAuthentication();
+        }
+
+        if (! Hash::check($data->password, $user->password)) {
+            $this->failAuthentication();
         }
 
         return $user;
+    }
+
+    /**
+     * @throws ValidationException
+     */
+    private function failAuthentication(): never
+    {
+        throw ValidationException::withMessages([
+            'email' => [__('auth.failed')],
+        ]);
     }
 
     /**

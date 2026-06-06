@@ -12,6 +12,7 @@ use App\Domains\Organization\Models\Organization;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
@@ -94,7 +95,12 @@ final readonly class RoleService
     {
         $this->registrar->setPermissionsTeamId($organization->getKey());
 
-        return Role::with('permissions')->paginate($perPage);
+        // Spatie does not auto-scope role queries by team, so filter explicitly —
+        // otherwise this would leak every organization's roles.
+        return Role::query()
+            ->where('organization_id', $organization->getKey())
+            ->with('permissions')
+            ->paginate($perPage);
     }
 
     /**
@@ -119,6 +125,15 @@ final readonly class RoleService
      */
     public function update(Role $role, ?string $name, ?array $permissions): Role
     {
+        // Default roles are part of the platform contract — their permissions may
+        // be tuned, but renaming one would break code/clients that resolve roles
+        // by name.
+        if ($name !== null && $name !== $role->name && $this->isDefaultRole($role)) {
+            throw ValidationException::withMessages([
+                'name' => ['Default roles cannot be renamed.'],
+            ]);
+        }
+
         return DB::transaction(function () use ($role, $name, $permissions): Role {
             if ($name !== null) {
                 $role->update(['name' => $name]);
@@ -136,7 +151,25 @@ final readonly class RoleService
 
     public function delete(Role $role): void
     {
+        // Default/system roles are provisioned for every organization and must
+        // not be deletable, or members would be left without a valid role.
+        if ($this->isDefaultRole($role)) {
+            throw ValidationException::withMessages([
+                'role' => ['Default roles cannot be deleted.'],
+            ]);
+        }
+
         $role->delete();
         $this->registrar->forgetCachedPermissions();
+    }
+
+    /**
+     * Whether this is a platform-provisioned role (an organization default or a
+     * global system role) rather than a custom one.
+     */
+    private function isDefaultRole(Role $role): bool
+    {
+        return in_array($role->name, OrganizationRole::values(), true)
+            || in_array($role->name, SystemRole::values(), true);
     }
 }

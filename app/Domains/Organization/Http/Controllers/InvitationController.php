@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Organization\Http\Controllers;
 
+use App\Domains\Authorization\Models\Role;
+use App\Domains\Authorization\Services\PermissionGuard;
 use App\Domains\Authorization\Support\Enums\DefaultPermission;
 use App\Domains\Organization\DTOs\InviteMemberData;
 use App\Domains\Organization\Http\Requests\InviteMemberRequest;
@@ -21,7 +23,10 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class InvitationController extends Controller
 {
-    public function __construct(private readonly InvitationService $invitations) {}
+    public function __construct(
+        private readonly InvitationService $invitations,
+        private readonly PermissionGuard $guard,
+    ) {}
 
     public function index(Request $request, Organization $organization): AnonymousResourceCollection
     {
@@ -37,6 +42,15 @@ final class InvitationController extends Controller
 
     public function store(InviteMemberRequest $request, Organization $organization): JsonResponse
     {
+        // The role is validated to exist in this organization; block inviting at
+        // a privilege level the inviter does not themselves hold (escalation).
+        $role = Role::query()
+            ->where('name', $request->string('role')->value())
+            ->where('organization_id', $organization->getKey())
+            ->firstOrFail();
+
+        $this->guard->assertMayAssignRole($request->user(), $organization, $role);
+
         $invitation = $this->invitations->invite(
             $organization,
             InviteMemberData::fromRequest($request),

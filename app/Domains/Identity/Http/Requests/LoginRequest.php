@@ -25,4 +25,15 @@ final class LoginRequest extends FormRequest
             'device_name' => ['sometimes', 'string', 'max:255'],
         ];
     }
+
+    /**
+     * Emails are stored lowercase at registration, so normalise the login email
+     * to keep authentication case-insensitive.
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('email')) {
+            $this->merge(['email' => mb_strtolower((string) $this->input('email'))]);
+        }
+    }
 }

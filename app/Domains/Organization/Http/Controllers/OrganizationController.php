@@ -7,11 +7,13 @@ namespace App\Domains\Organization\Http\Controllers;
 use App\Domains\Authorization\Support\Enums\DefaultPermission;
 use App\Domains\Organization\DTOs\CreateOrganizationData;
 use App\Domains\Organization\Http\Requests\StoreOrganizationRequest;
+use App\Domains\Organization\Http\Requests\TransferOwnershipRequest;
 use App\Domains\Organization\Http\Requests\UpdateOrganizationRequest;
 use App\Domains\Organization\Http\Resources\OrganizationResource;
 use App\Domains\Organization\Models\Organization;
 use App\Domains\Organization\Services\OrganizationService;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -80,5 +82,18 @@ final class OrganizationController extends Controller
         $this->organizations->switchCurrent($request->user(), $organization);
 
         return OrganizationResource::make($organization);
+    }
+
+    /**
+     * Transfer ownership to another member (current owner / SuperAdmin only,
+     * enforced by TransferOwnershipRequest).
+     */
+    public function transferOwnership(TransferOwnershipRequest $request, Organization $organization): OrganizationResource
+    {
+        $newOwner = User::findOrFail($request->string('user_id')->value());
+
+        $organization = $this->organizations->transferOwnership($organization, $newOwner);
+
+        return OrganizationResource::make($organization->loadCount('members'));
     }
 }

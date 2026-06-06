@@ -70,7 +70,10 @@ return [
             'queue' => env('REDIS_QUEUE', 'default'),
             'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
             'block_for' => null,
-            'after_commit' => false,
+            // Dispatch queued work (escalation listeners, broadcasts, notifications)
+            // only after the originating DB transaction commits, so a worker never
+            // races ahead and acts on a row that was never persisted.
+            'after_commit' => true,
         ],
 
         'deferred' => [

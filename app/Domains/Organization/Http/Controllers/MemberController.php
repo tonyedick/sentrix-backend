@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Organization\Http\Controllers;
 
+use App\Domains\Authorization\Models\Role;
+use App\Domains\Authorization\Services\PermissionGuard;
 use App\Domains\Authorization\Support\Enums\DefaultPermission;
 use App\Domains\Organization\Http\Requests\UpdateMemberRequest;
 use App\Domains\Organization\Http\Resources\MemberResource;
@@ -18,7 +20,10 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class MemberController extends Controller
 {
-    public function __construct(private readonly MembershipService $memberships) {}
+    public function __construct(
+        private readonly MembershipService $memberships,
+        private readonly PermissionGuard $guard,
+    ) {}
 
     public function index(Request $request, Organization $organization): AnonymousResourceCollection
     {
@@ -39,7 +44,26 @@ final class MemberController extends Controller
 
     public function update(UpdateMemberRequest $request, Organization $organization, User $user): MemberResource
     {
-        $this->memberships->updateRole($organization, $user, $request->string('role')->value());
+        // The owner's role is fixed (they hold an implicit super-grant anyway);
+        // it must not be altered by anyone, including other admins.
+        abort_if(
+            $organization->owner_id === $user->getKey(),
+            Response::HTTP_FORBIDDEN,
+            "The organization owner's role cannot be changed.",
+        );
+
+        $roleName = $request->string('role')->value();
+
+        // The role is validated to exist in this organization; load it to check
+        // the actor is not assigning privileges beyond their own (escalation).
+        $role = Role::query()
+            ->where('name', $roleName)
+            ->where('organization_id', $organization->getKey())
+            ->firstOrFail();
+
+        $this->guard->assertMayAssignRole($request->user(), $organization, $role);
+
+        $this->memberships->updateRole($organization, $user, $roleName);
 
         return MemberResource::make($user->refresh());
     }

@@ -23,7 +23,7 @@ final class UpdateRoleRequest extends FormRequest
         return [
             'name' => ['sometimes', 'string', 'max:100'],
             'permissions' => ['sometimes', 'array'],
-            'permissions.*' => ['string', Rule::exists('permissions', 'name')],
+            'permissions.*' => ['string', Rule::exists('permissions', 'name')->where('guard_name', 'web')],
         ];
     }
 }
