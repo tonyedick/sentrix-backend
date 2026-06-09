@@ -26,7 +26,14 @@ services:
             - redis
             - mailpit
     pgsql:
-        image: 'postgres:18-alpine'
+        # PostGIS-enabled Postgres (provides the `postgis` extension used for
+        # location proximity/geofence). PostGIS has not published a stable image
+        # for Postgres 18 yet, so we pin 17. The official `postgis/postgis` image
+        # is amd64-only for this tag, so we use `imresamu/postgis` — the multi-arch
+        # (arm64 + amd64) build recommended by the PostGIS Docker docs, which keeps
+        # parity between Apple Silicon dev machines and amd64 CI/prod.
+        # Changing the image/major requires recreating the volume: `sail down -v`.
+        image: 'imresamu/postgis:17-3.5'
         ports:
             - '${FORWARD_DB_PORT:-5432}:5432'
         environment:
