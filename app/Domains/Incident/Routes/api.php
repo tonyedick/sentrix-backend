@@ -11,6 +11,7 @@ Route::middleware(['auth:sanctum', 'organization.team'])
         Route::get('incidents', [IncidentController::class, 'index'])->name('incidents.index');
         Route::post('incidents', [IncidentController::class, 'store'])->name('incidents.store');
         Route::get('incidents/{incident}', [IncidentController::class, 'show'])->name('incidents.show');
+        Route::get('incidents/{incident}/timeline', [IncidentController::class, 'timeline'])->name('incidents.timeline');
         Route::patch('incidents/{incident}', [IncidentController::class, 'update'])->name('incidents.update');
         Route::post('incidents/{incident}/investigate', [IncidentController::class, 'investigate'])->name('incidents.investigate');
         Route::post('incidents/{incident}/escalate', [IncidentController::class, 'escalate'])->name('incidents.escalate');

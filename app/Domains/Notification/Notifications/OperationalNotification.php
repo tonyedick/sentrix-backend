@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Notification\Notifications;
 
+use App\Domains\Notification\Channels\PushChannel;
+use App\Domains\Notification\Channels\SmsChannel;
+use App\Domains\Notification\Services\NotificationPolicyResolver;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\BroadcastMessage;
@@ -12,12 +15,17 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Base for operational responder notifications. Queued and resilient (bounded
- * retries + failure logging), and channel selection is driven by config so
- * operators can enable/disable channels without code changes.
+ * Base for operational notifications. Queued and resilient (bounded retries +
+ * failure logging). Channel selection is the recipient organization's
+ * notification policy (falling back to config), intersected with the channels
+ * this notification actually implements:
  *
- * Concrete notifications provide the payload ({@see toArray()}) and the email
- * body ({@see toMail()}); the broadcast channel reuses the array payload.
+ *   - database / broadcast: always available (use toArray()).
+ *   - mail / sms / push: available when the concrete notification implements
+ *     toMail() / toSms() / toPush().
+ *
+ * All deliveries run on the dedicated `notifications` Horizon queue (viaQueues);
+ * outcomes are recorded per channel by RecordNotificationDelivery.
  */
 abstract class OperationalNotification extends Notification implements ShouldQueue
 {
@@ -38,25 +46,47 @@ abstract class OperationalNotification extends Notification implements ShouldQue
     }
 
     /**
-     * Channels are the intersection of the configured set and those this
-     * notification actually implements — so an unimplemented channel in config
-     * is ignored rather than throwing at delivery time.
+     * The organization this notification concerns, used to resolve the channel
+     * policy. Concrete notifications override when they relate to an organization.
+     */
+    public function organizationId(): ?string
+    {
+        return null;
+    }
+
+    /**
+     * Delivery channels = (org policy ∩ what this notification supports), mapped
+     * to the identifiers Laravel expects (custom channels referenced by class).
      *
      * @return list<string>
      */
     public function via(object $notifiable): array
     {
-        $configured = (array) config('sentrix.notifications.channels', ['mail', 'database', 'broadcast']);
+        $channels = array_values(array_intersect($this->enabledChannels(), $this->supportedChannels()));
 
-        return array_values(array_intersect($configured, $this->supportedChannels()));
+        return array_map(static fn (string $channel): string => match ($channel) {
+            'sms' => SmsChannel::class,
+            'push' => PushChannel::class,
+            default => $channel,
+        }, $channels);
     }
 
     /**
-     * @return list<string>
+     * Run every channel on the dedicated notifications queue (Horizon).
+     *
+     * @return array<string, string>
      */
-    protected function supportedChannels(): array
+    public function viaQueues(): array
     {
-        return ['mail', 'database', 'broadcast'];
+        $queue = (string) config('sentrix.notifications.queue', 'notifications');
+
+        return [
+            'mail' => $queue,
+            'database' => $queue,
+            'broadcast' => $queue,
+            SmsChannel::class => $queue,
+            PushChannel::class => $queue,
+        ];
     }
 
     public function toBroadcast(object $notifiable): BroadcastMessage
@@ -75,5 +105,39 @@ abstract class OperationalNotification extends Notification implements ShouldQue
             'notification' => static::class,
             'exception' => $exception->getMessage(),
         ]);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function enabledChannels(): array
+    {
+        $organizationId = $this->organizationId();
+
+        if ($organizationId !== null) {
+            return app(NotificationPolicyResolver::class)->for($organizationId)->enabledChannels();
+        }
+
+        return (array) config('sentrix.notifications.channels', ['mail', 'database', 'broadcast']);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function supportedChannels(): array
+    {
+        $supported = ['database', 'broadcast'];
+
+        if (method_exists($this, 'toMail')) {
+            $supported[] = 'mail';
+        }
+        if (method_exists($this, 'toSms')) {
+            $supported[] = 'sms';
+        }
+        if (method_exists($this, 'toPush')) {
+            $supported[] = 'push';
+        }
+
+        return $supported;
     }
 }

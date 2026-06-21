@@ -38,6 +38,9 @@ class User extends Authenticatable implements MustVerifyEmail
         'email',
         'password',
         'current_organization_id',
+        'phone',
+        'push_tokens',
+        'preferences',
     ];
 
     protected $hidden = [
@@ -49,8 +52,29 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return [
             'email_verified_at' => 'datetime',
+            'phone_verified_at' => 'datetime',
             'password' => 'hashed',
+            'push_tokens' => 'array',
+            'preferences' => 'array',
         ];
+    }
+
+    /**
+     * SMS destination for the notifications SmsChannel.
+     */
+    public function routeNotificationForSms(): ?string
+    {
+        return $this->phone;
+    }
+
+    /**
+     * Device tokens for the notifications PushChannel.
+     *
+     * @return list<string>
+     */
+    public function routeNotificationForPush(): array
+    {
+        return array_values($this->push_tokens ?? []);
     }
 
     /**
@@ -72,6 +96,16 @@ class User extends Authenticatable implements MustVerifyEmail
     public function memberships(): HasMany
     {
         return $this->hasMany(OrganizationMembership::class);
+    }
+
+    /**
+     * The user's trusted safety contacts (notified on SOS / overdue / emergency).
+     *
+     * @return HasMany<\App\Domains\Identity\Models\SafetyContact, $this>
+     */
+    public function safetyContacts(): HasMany
+    {
+        return $this->hasMany(\App\Domains\Identity\Models\SafetyContact::class);
     }
 
     /**
@@ -106,11 +140,11 @@ class User extends Authenticatable implements MustVerifyEmail
             $rolePivot = $columns['role_pivot_key'] ?? 'role_id';
 
             return DB::table($tables['model_has_roles'])
-                ->join($tables['roles'], $tables['roles'].'.id', '=', $tables['model_has_roles'].'.'.$rolePivot)
-                ->where($tables['model_has_roles'].'.model_type', $this->getMorphClass())
-                ->where($tables['model_has_roles'].'.'.$columns['model_morph_key'], $this->getKey())
-                ->whereNull($tables['model_has_roles'].'.'.$columns['team_foreign_key'])
-                ->where($tables['roles'].'.name', SystemRole::SuperAdmin->value)
+                ->join($tables['roles'], $tables['roles'] . '.id', '=', $tables['model_has_roles'] . '.' . $rolePivot)
+                ->where($tables['model_has_roles'] . '.model_type', $this->getMorphClass())
+                ->where($tables['model_has_roles'] . '.' . $columns['model_morph_key'], $this->getKey())
+                ->whereNull($tables['model_has_roles'] . '.' . $columns['team_foreign_key'])
+                ->where($tables['roles'] . '.name', SystemRole::SuperAdmin->value)
                 ->exists();
         });
     }

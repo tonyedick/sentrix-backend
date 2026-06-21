@@ -1,0 +1,148 @@
+{
+  "info": {
+    "name": "Sentrix Backend (Laravel) — API",
+    "description": "Canonical Sentrix backend API (/api/v1). Auth is Sanctum bearer tokens for API clients: send `device_name` on register/login to get a token; it is captured automatically into the `token` collection variable. Set `base_url` to your share/tunnel URL (no trailing slash). Seeded demo login: test@example.com / password (owns the 'Acme Inc' org); platform admin: admin@sentrix.test / password.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "base_url", "value": "https://REPLACE-with-your-share-url" },
+    { "key": "token", "value": "" },
+    { "key": "organization_id", "value": "" },
+    { "key": "incident_id", "value": "" },
+    { "key": "pass_id", "value": "" },
+    { "key": "pass_code", "value": "" },
+    { "key": "device_id", "value": "" },
+    { "key": "policy_id", "value": "" },
+    { "key": "claim_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "const d = pm.response.json().data || {};",
+            "if (d.token) pm.collectionVariables.set('token', d.token);"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": "{{base_url}}/api/v1/auth/register",
+            "body": { "mode": "raw", "options": { "raw": { "language": "json" } }, "raw": "{\n  \"name\": \"Postman Tester\",\n  \"email\": \"tester@example.com\",\n  \"password\": \"Password123!\",\n  \"password_confirmation\": \"Password123!\",\n  \"device_name\": \"postman\"\n}" }
+          }
+        },
+        {
+          "name": "Login (demo user)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "const d = pm.response.json().data || {};",
+            "if (d.token) pm.collectionVariables.set('token', d.token);"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": "{{base_url}}/api/v1/auth/login",
+            "body": { "mode": "raw", "options": { "raw": { "language": "json" } }, "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password\",\n  \"device_name\": \"postman\"\n}" }
+          }
+        },
+        {
+          "name": "Me",
+          "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/auth/me" }
+        },
+        {
+          "name": "Logout",
+          "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/auth/logout" }
+        }
+      ]
+    },
+    {
+      "name": "Organizations",
+      "item": [
+        {
+          "name": "List my organizations",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "const rows = (pm.response.json().data) || [];",
+            "if (rows.length) pm.collectionVariables.set('organization_id', rows[0].id);"
+          ], "type": "text/javascript" } }],
+          "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations" }
+        },
+        {
+          "name": "Create organization",
+          "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations", "body": { "mode": "raw", "options": { "raw": { "language": "json" } }, "raw": "{\n  \"name\": \"Postman Org\"\n}" } }
+        },
+        {
+          "name": "Members",
+          "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/members" }
+        },
+        {
+          "name": "Permissions (mine)",
+          "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/permissions" }
+        }
+      ]
+    },
+    {
+      "name": "Incidents",
+      "item": [
+        { "name": "List", "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/incidents" } },
+        { "name": "Create", "event": [{ "listen": "test", "script": { "exec": ["const d=pm.response.json().data||{}; if(d.id) pm.collectionVariables.set('incident_id', d.id);"], "type": "text/javascript" } }], "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/incidents", "body": { "mode": "raw", "options": { "raw": { "language": "json" } }, "raw": "{\n  \"title\": \"Suspicious activity at gate\",\n  \"severity\": \"high\"\n}" } } },
+        { "name": "Show", "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/incidents/{{incident_id}}" } },
+        { "name": "Escalate", "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/incidents/{{incident_id}}/escalate" } },
+        { "name": "Resolve", "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/incidents/{{incident_id}}/resolve" } }
+      ]
+    },
+    {
+      "name": "Access — Passes & Gate",
+      "item": [
+        { "name": "Issue pass", "event": [{ "listen": "test", "script": { "exec": ["const d=pm.response.json().data||{}; if(d.id) pm.collectionVariables.set('pass_id', d.id); if(d.code) pm.collectionVariables.set('pass_code', d.code);"], "type": "text/javascript" } }], "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/passes", "body": { "mode": "raw", "options": { "raw": { "language": "json" } }, "raw": "{\n  \"visitor_name\": \"Chidi (guest)\",\n  \"type\": \"single\"\n}" } } },
+        { "name": "List passes", "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/passes" } },
+        { "name": "Gate scan", "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/gate/scan", "body": { "mode": "raw", "options": { "raw": { "language": "json" } }, "raw": "{\n  \"code\": \"{{pass_code}}\",\n  \"gate\": \"Main Gate\",\n  \"direction\": \"in\"\n}" } } },
+        { "name": "Revoke pass", "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/passes/{{pass_id}}/revoke" } },
+        { "name": "Gate log", "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/gate" } }
+      ]
+    },
+    {
+      "name": "Hardware",
+      "item": [
+        { "name": "Register device", "event": [{ "listen": "test", "script": { "exec": ["const d=pm.response.json().data||{}; if(d.id) pm.collectionVariables.set('device_id', d.id);"], "type": "text/javascript" } }], "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/hardware", "body": { "mode": "raw", "options": { "raw": { "language": "json" } }, "raw": "{\n  \"kind\": \"gate_scanner\",\n  \"serial\": \"SN-NORTH-001\",\n  \"name\": \"North Gate Scanner\",\n  \"site\": \"HQ\"\n}" } } },
+        { "name": "List devices", "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/hardware" } },
+        { "name": "Resync device", "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/hardware/{{device_id}}/resync" } },
+        { "name": "Diagnose device", "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/hardware/{{device_id}}/diagnose" } }
+      ]
+    },
+    {
+      "name": "Insurance",
+      "item": [
+        { "name": "Risk profile", "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/insurance/risk" } },
+        { "name": "Quote", "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/insurance/quote", "body": { "mode": "raw", "options": { "raw": { "language": "json" } }, "raw": "{}" } } },
+        { "name": "List policies", "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/insurance/policies" } },
+        { "name": "Create policy", "event": [{ "listen": "test", "script": { "exec": ["const d=pm.response.json().data||{}; if(d.id) pm.collectionVariables.set('policy_id', d.id);"], "type": "text/javascript" } }], "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/insurance/policies", "body": { "mode": "raw", "options": { "raw": { "language": "json" } }, "raw": "{\n  \"title\": \"Estate cover 2026\",\n  \"premium_cents\": 62560000,\n  \"currency\": \"NGN\",\n  \"coverage\": { \"theft\": true, \"fire\": true },\n  \"period_start\": \"2026-01-01\",\n  \"period_end\": \"2026-12-31\"\n}" } } },
+        { "name": "List claims", "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/insurance/claims" } },
+        { "name": "File claim", "event": [{ "listen": "test", "script": { "exec": ["const d=pm.response.json().data||{}; if(d.id) pm.collectionVariables.set('claim_id', d.id);"], "type": "text/javascript" } }], "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/insurance/claims", "body": { "mode": "raw", "options": { "raw": { "language": "json" } }, "raw": "{\n  \"policy_id\": \"{{policy_id}}\",\n  \"amount_cents\": 1500000,\n  \"currency\": \"NGN\",\n  \"description\": \"Break-in at the rear gate, backed by Omni footage\"\n}" } } },
+        { "name": "Decide claim", "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/insurance/claims/{{claim_id}}/decide", "body": { "mode": "raw", "options": { "raw": { "language": "json" } }, "raw": "{\n  \"status\": \"approved\"\n}" } } }
+      ]
+    },
+    {
+      "name": "Emergencies & Trips",
+      "item": [
+        { "name": "List emergencies", "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/emergencies" } },
+        { "name": "List trips", "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/trips" } },
+        { "name": "List responders", "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/responders" } },
+        { "name": "Audit log", "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/organizations/{{organization_id}}/audit-logs" } }
+      ]
+    },
+    {
+      "name": "Consumer & Meta",
+      "item": [
+        { "name": "Health", "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/health" } },
+        { "name": "Plans", "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/plans" } },
+        { "name": "My subscription", "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/me/subscription" } },
+        { "name": "Community feed (nearby)", "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/me/alerts?lat=6.5244&lng=3.3792&radius=5000" } },
+        { "name": "Notifications", "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{base_url}}/api/v1/notifications" } }
+      ]
+    }
+  ]
+}

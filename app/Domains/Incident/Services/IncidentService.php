@@ -125,13 +125,13 @@ final readonly class IncidentService
         );
     }
 
-    public function escalate(Incident $incident, User $actor): Incident
+    public function escalate(Incident $incident, ?User $actor = null): Incident
     {
         return $this->transition(
             $incident,
             IncidentStatus::Escalated,
             $actor,
-            fn (Incident $i, string $from) => new IncidentEscalated($i, $actor->getKey(), [
+            fn (Incident $i, string $from) => new IncidentEscalated($i, $actor?->getKey(), [
                 'from' => $from,
                 'to' => $i->status->value,
             ]),
@@ -177,7 +177,7 @@ final readonly class IncidentService
     private function transition(
         Incident $incident,
         IncidentStatus $target,
-        User $actor,
+        ?User $actor,
         callable $makeEvent,
         array $extraAttributes = [],
     ): Incident {

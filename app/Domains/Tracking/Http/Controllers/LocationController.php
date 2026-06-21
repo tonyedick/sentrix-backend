@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace App\Domains\Tracking\Http\Controllers;
 
 use App\Domains\Authorization\Support\Enums\DefaultPermission;
+use App\Domains\Emergency\Models\Emergency;
 use App\Domains\Organization\Models\Organization;
 use App\Domains\Tracking\DTOs\LocationFix;
 use App\Domains\Tracking\Http\Requests\IngestLocationsRequest;
+use App\Domains\Tracking\Http\Resources\ProximityTripResource;
 use App\Domains\Tracking\Http\Resources\TripLocationResource;
 use App\Domains\Tracking\Http\Resources\TripPositionResource;
 use App\Domains\Tracking\Models\TripLocation;
 use App\Domains\Tracking\Services\LocationIngestService;
+use App\Domains\Tracking\Services\ProximityService;
 use App\Domains\Trip\Models\Trip;
 use App\Domains\Trip\Support\Enums\TripStatus;
 use App\Http\Controllers\Controller;
@@ -23,12 +26,18 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Trip location tracking. Ingest is the device (the trip's monitored user)
- * reporting its own positions; reads are the historical track and the live
- * org-wide position snapshot.
+ * reporting its own positions; reads are the historical track, the live org-wide
+ * position snapshot, and PostGIS proximity queries.
  */
 final class LocationController extends Controller
 {
-    public function __construct(private readonly LocationIngestService $ingest) {}
+    public function __construct(
+        private readonly LocationIngestService $ingest,
+        private readonly ProximityService $proximity,
+    ) {}
+
+    /** Default proximity radius in metres when none is supplied. */
+    private const DEFAULT_RADIUS_METERS = 5000;
 
     /**
      * Batch-ingest fixes for a trip. Only the trip's own user (the reporting
@@ -92,6 +101,69 @@ final class LocationController extends Controller
             ->paginate($this->perPage($request));
 
         return TripPositionResource::collection($positions);
+    }
+
+    /**
+     * Active trips within a radius of a point, nearest first. Operator-facing.
+     */
+    public function nearby(Request $request, Organization $organization): AnonymousResourceCollection
+    {
+        $this->assertCanQueryProximity($request->user());
+
+        $validated = $request->validate([
+            'lat' => ['required', 'numeric', 'between:-90,90'],
+            'lng' => ['required', 'numeric', 'between:-180,180'],
+            'radius' => ['sometimes', 'integer', 'min:1', 'max:100000'],
+        ]);
+
+        $trips = $this->proximity->nearbyActiveTrips(
+            $organization,
+            (float) $validated['lat'],
+            (float) $validated['lng'],
+            (int) ($validated['radius'] ?? self::DEFAULT_RADIUS_METERS),
+            $this->perPage($request),
+        );
+
+        return ProximityTripResource::collection($trips);
+    }
+
+    /**
+     * Active trips near an emergency's location — "who is close to this incident".
+     * Excludes the emergency's own trip.
+     */
+    public function nearbyToEmergency(Request $request, Organization $organization, Emergency $emergency): AnonymousResourceCollection
+    {
+        abort_if($emergency->organization_id !== $organization->getKey(), Response::HTTP_NOT_FOUND);
+        $this->assertCanQueryProximity($request->user());
+
+        abort_if(
+            $emergency->lat === null || $emergency->lng === null,
+            Response::HTTP_UNPROCESSABLE_ENTITY,
+            'This emergency has no location to search around.',
+        );
+
+        $validated = $request->validate([
+            'radius' => ['sometimes', 'integer', 'min:1', 'max:100000'],
+        ]);
+
+        $trips = $this->proximity->nearbyActiveTrips(
+            $organization,
+            (float) $emergency->lat,
+            (float) $emergency->lng,
+            (int) ($validated['radius'] ?? self::DEFAULT_RADIUS_METERS),
+            $this->perPage($request),
+            excludeTripId: $emergency->trip_id,
+        );
+
+        return ProximityTripResource::collection($trips);
+    }
+
+    private function assertCanQueryProximity(User $user): void
+    {
+        abort_unless(
+            $user->can(DefaultPermission::TrackingView->value) && $this->isOperator($user),
+            Response::HTTP_FORBIDDEN,
+        );
     }
 
     private function isOperator(User $user): bool

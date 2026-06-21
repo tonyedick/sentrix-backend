@@ -200,8 +200,9 @@ return [
         'supervisor-1' => [
             'connection' => 'redis',
             // Listed highest-priority first: life-safety broadcasts (emergencies,
-            // incident escalations) are drained ahead of routine work.
-            'queue' => ['critical', 'default'],
+            // incident escalations) are drained ahead of routine work. `ai` carries
+            // advisory dispatch recommendations (lowest priority, never blocks).
+            'queue' => ['critical', 'default', 'notifications', 'escalation', 'ai'],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
             'maxProcesses' => 1,

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Incident\Http\Controllers;
 
+use App\Domains\Assignment\Http\Resources\AssignmentResource;
+use App\Domains\Assignment\Models\Assignment;
+use App\Domains\Assignment\Support\Enums\AssignmentStatus;
 use App\Domains\Authorization\Support\Enums\DefaultPermission;
 use App\Domains\Emergency\Models\Emergency;
 use App\Domains\Incident\DTOs\OpenIncidentData;
@@ -13,6 +16,7 @@ use App\Domains\Incident\Http\Requests\UpdateIncidentRequest;
 use App\Domains\Incident\Http\Resources\IncidentResource;
 use App\Domains\Incident\Models\Incident;
 use App\Domains\Incident\Services\IncidentService;
+use App\Domains\Incident\Services\IncidentTimelineService;
 use App\Domains\Organization\Models\Organization;
 use App\Http\Controllers\Controller;
 use App\Models\User;
@@ -70,12 +74,43 @@ final class IncidentController extends Controller
             ->setStatusCode(Response::HTTP_CREATED);
     }
 
-    public function show(Request $request, Organization $organization, Incident $incident): IncidentResource
+    /**
+     * Operational incident detail: the incident, its active assignment (with
+     * responder lines), and a consolidated timeline.
+     */
+    public function show(Request $request, Organization $organization, Incident $incident, IncidentTimelineService $timeline): JsonResponse
     {
         $this->assertIncidentInOrganization($organization, $incident);
         abort_unless($request->user()->can(DefaultPermission::IncidentsView->value), Response::HTTP_FORBIDDEN);
 
-        return IncidentResource::make($incident);
+        $assignment = $this->activeAssignment($incident);
+
+        return response()->json([
+            'data' => [
+                'incident' => IncidentResource::make($incident)->resolve($request),
+                'assignment' => $assignment !== null
+                    ? AssignmentResource::make($assignment->load('responders'))->resolve($request)
+                    : null,
+                'timeline' => $timeline->forIncident($incident),
+            ],
+        ]);
+    }
+
+    public function timeline(Request $request, Organization $organization, Incident $incident, IncidentTimelineService $timeline): JsonResponse
+    {
+        $this->assertIncidentInOrganization($organization, $incident);
+        abort_unless($request->user()->can(DefaultPermission::IncidentsView->value), Response::HTTP_FORBIDDEN);
+
+        return response()->json(['data' => $timeline->forIncident($incident)]);
+    }
+
+    private function activeAssignment(Incident $incident): ?Assignment
+    {
+        return Assignment::query()
+            ->where('incident_id', $incident->getKey())
+            ->whereNotIn('status', [AssignmentStatus::Completed->value, AssignmentStatus::Cancelled->value])
+            ->latest('created_at')
+            ->first();
     }
 
     public function update(UpdateIncidentRequest $request, Organization $organization, Incident $incident): IncidentResource

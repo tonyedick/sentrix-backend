@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Domains\Identity\Providers;
 
+use App\Domains\Identity\Contracts\SocialVerifier;
 use App\Domains\Identity\Events\UserRegistered;
 use App\Domains\Identity\Listeners\SendEmailVerificationLink;
+use App\Domains\Identity\Support\StubSocialVerifier;
 use App\Domains\Shared\Providers\DomainServiceProvider;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Auth\Notifications\VerifyEmail;
@@ -20,12 +22,23 @@ use Illuminate\Validation\Rules\Password;
 
 final class IdentityServiceProvider extends DomainServiceProvider
 {
+    public function register(): void
+    {
+        // Social token verification driver (swap stub → apple/google in prod).
+        $this->app->bind(SocialVerifier::class, static function (): SocialVerifier {
+            return match ((string) config('sentrix.auth.social.driver', 'stub')) {
+                default => new StubSocialVerifier(),
+            };
+        });
+    }
+
     public function boot(): void
     {
         $this->configurePasswordPolicy();
         $this->configureRateLimiting();
         $this->configureNotificationUrls();
         $this->registerListeners();
+        $this->loadDomainMigrations();
         $this->loadDomainApiRoutes();
     }
 

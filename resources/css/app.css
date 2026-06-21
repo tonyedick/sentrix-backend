@@ -2,8 +2,97 @@
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
+@source '../js/**/*.{ts,tsx}';
 
+/*
+ | Sentrix Operations design tokens (dark-first, neutral-dominant).
+ | Mirrors docs/ux-architecture.md: 4px spacing base, Inter-like sans + mono,
+ | restrained color where status/severity carry meaning. Each token becomes a
+ | Tailwind utility (e.g. --color-surface-1 → bg-surface-1 / text-surface-1 /
+ | border-surface-1).
+ */
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+
+    /* Brand (from the Sentrix mobile concept: navy base + teal→cyan mark) */
+    --color-brand-navy: #0a1f44;
+    --color-brand-teal: #0e7c7b;
+    --color-brand-cyan: #3fd3ca;
+
+    /* Surfaces — navy-tinted, dark-first */
+    --color-surface-0: #071529;
+    --color-surface-1: #0b1d38;
+    --color-surface-2: #102545;
+    --color-surface-3: #16315a;
+
+    /* Content / text */
+    --color-content-primary: #e9eff7;
+    --color-content-secondary: #9db0cc;
+    --color-content-muted: #5f7190;
+    --color-content-inverse: #071529;
+
+    /* Borders */
+    --color-border-subtle: #15294a;
+    --color-border-default: #21385c;
+    --color-border-strong: #314f78;
+
+    /* Accent (primary action) — brand teal, brightened for dark surfaces */
+    --color-accent: #13a097;
+    --color-accent-hover: #2cc0b5;
+    --color-accent-fg: #04201f;
+
+    /* Semantic status (used for pills/dots). Green stays reserved for
+       "committed / safe"; info is a blue distinct from the teal accent. */
+    --color-status-info: #4f9bff;
+    --color-status-success: #2fb87a;
+    --color-status-warn: #d99a2b;
+    --color-status-danger: #e5484d;
+    --color-status-neutral: #6b7280;
+
+    /* Severity ramp: low → critical */
+    --color-severity-low: #5b6472;
+    --color-severity-medium: #d99a2b;
+    --color-severity-high: #e0702e;
+    --color-severity-critical: #e5484d;
+}
+
+html,
+body,
+#app {
+    height: 100%;
+}
+
+/* Tabular numerals for live timers / counts */
+.tabular {
+    font-variant-numeric: tabular-nums;
+    font-family: var(--font-mono);
+}
+
+/* Gentle attention pulse for escalated rows — present but not seizure-inducing. */
+@keyframes pulse-soft {
+    0%,
+    100% {
+        background-color: color-mix(in oklab, var(--color-status-danger) 6%, transparent);
+    }
+    50% {
+        background-color: color-mix(in oklab, var(--color-status-danger) 14%, transparent);
+    }
+}
+.animate-pulse-soft {
+    animation: pulse-soft 2.4s ease-in-out infinite;
+}
+
+/* Brief highlight when a new live item arrives (timeline / activity feed). */
+@keyframes flash-in {
+    from {
+        background-color: color-mix(in oklab, var(--color-accent) 18%, transparent);
+    }
+    to {
+        background-color: transparent;
+    }
+}
+.animate-flash-in {
+    animation: flash-in 1.6s ease-out;
 }

@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Shared\Events;
 
+use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
@@ -56,12 +58,35 @@ abstract class OrganizationBroadcastEvent implements ShouldBroadcast
     abstract public function broadcastWith(): array;
 
     /**
-     * @return list<PrivateChannel>
+     * Route the event to role-scoped channels based on its dotted action prefix,
+     * so each consumer set only receives what it is authorized for (see
+     * routes/channels.php). Unknown prefixes fall back to the general
+     * organization channel (members only).
+     *
+     * @return list<Channel>
      */
     public function broadcastOn(): array
     {
-        return [
-            new PrivateChannel('organizations.'.$this->organizationId()),
-        ];
+        $org = $this->organizationId();
+        $prefix = explode('.', $this->broadcastAs(), 2)[0];
+
+        return match ($prefix) {
+            'incident' => [
+                new PrivateChannel("organizations.{$org}.incidents"),
+                new PrivateChannel("organizations.{$org}.dashboard"),
+            ],
+            'assignment' => [
+                new PrivateChannel("organizations.{$org}.assignments"),
+                new PrivateChannel("organizations.{$org}.dashboard"),
+            ],
+            'responder' => [
+                new PresenceChannel("organizations.{$org}.responders"),
+                new PrivateChannel("organizations.{$org}.dashboard"),
+            ],
+            default => [
+                new PrivateChannel("organizations.{$org}"),
+            ],
+        };
     }
 }
+

@@ -28,6 +28,16 @@
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
+        <!-- Escalation is opt-in; pin it OFF with default thresholds for tests so
+             the suite is deterministic regardless of the developer's .env (which
+             may enable escalation for a live Horizon demo). Tests that exercise
+             escalation enable it explicitly via config(). -->
+        <env name="SENTRIX_ESCALATE_INCIDENT_ENABLED" value="false" force="true"/>
+        <env name="SENTRIX_ESCALATE_RESPONDER_ENABLED" value="false" force="true"/>
+        <env name="SENTRIX_ESCALATE_ASSIGNMENT_ENABLED" value="false" force="true"/>
+        <env name="SENTRIX_ESCALATE_INCIDENT_UNASSIGNED" value="300" force="true"/>
+        <env name="SENTRIX_ESCALATE_RESPONDER_NO_PROGRESSION" value="600" force="true"/>
+        <env name="SENTRIX_ESCALATE_ASSIGNMENT_UNACCEPTED" value="120" force="true"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

@@ -28,16 +28,16 @@ final readonly class AuthService
     /**
      * Create a new user and emit the domain event.
      */
-    public function register(RegisterUserData $data): User
+    public function register(RegisterUserData $data, bool $provisionDefaultOrganization = true): User
     {
-        return $this->db->transaction(function () use ($data): User {
+        return $this->db->transaction(function () use ($data, $provisionDefaultOrganization): User {
             $user = User::create([
                 'name' => $data->name,
                 'email' => $data->email,
                 'password' => $data->password, // hashed by the model cast
             ]);
 
-            event(new UserRegistered($user));
+            event(new UserRegistered($user, $provisionDefaultOrganization));
 
             return $user;
         });

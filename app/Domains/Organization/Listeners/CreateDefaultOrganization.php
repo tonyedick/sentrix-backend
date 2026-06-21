@@ -24,6 +24,11 @@ final class CreateDefaultOrganization extends QueuedListener
 
     public function handle(UserRegistered $event): void
     {
+        // Consumer/mobile signups are user-scoped (ADR-0001) and get no workspace.
+        if (! $event->provisionDefaultOrganization) {
+            return;
+        }
+
         if ($event->user->organizations()->exists()) {
             return;
         }

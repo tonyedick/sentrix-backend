@@ -25,3 +25,35 @@ Schedule::command('tracking:ensure-partitions')
 Schedule::command('tracking:flag-stale')
     ->everyMinute()
     ->withoutOverlapping();
+
+// Warn on expiring and lapse expired responder certifications. Idempotent.
+Schedule::command('responders:check-certifications')
+    ->daily()
+    ->withoutOverlapping();
+
+// Activate/close responder duty shifts at their boundaries. Idempotent.
+Schedule::command('responders:process-duty')
+    ->everyMinute()
+    ->withoutOverlapping();
+
+// Escalate assignments past their acceptance deadline. Idempotent.
+Schedule::command('assignments:escalate-overdue')
+    ->everyMinute()
+    ->withoutOverlapping();
+
+// Stand down + reassign responders that have lost connectivity. Idempotent.
+Schedule::command('assignments:reconcile-connectivity')
+    ->everyMinute()
+    ->withoutOverlapping();
+
+// Dead-man switch: flag Ledger sources that have gone silent past the stale
+// window (raises one alert per source, re-armed on next write). Idempotent.
+Schedule::command('ledger:flag-stale')
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
+
+// Age Evidence observations through the storage tiers (hot->warm->cold) across
+// every organization by plan retention windows. Idempotent + row-atomic.
+Schedule::command('retention:sweep')
+    ->daily()
+    ->withoutOverlapping();

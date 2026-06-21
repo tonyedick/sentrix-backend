@@ -11,4 +11,8 @@ Route::middleware(['auth:sanctum', 'organization.team'])
         Route::post('trips/{trip}/locations', [LocationController::class, 'store'])->name('trips.locations.store');
         Route::get('trips/{trip}/locations', [LocationController::class, 'index'])->name('trips.locations.index');
         Route::get('locations/latest', [LocationController::class, 'latest'])->name('locations.latest');
+
+        // PostGIS proximity.
+        Route::get('locations/nearby', [LocationController::class, 'nearby'])->name('locations.nearby');
+        Route::get('emergencies/{emergency}/nearby-trips', [LocationController::class, 'nearbyToEmergency'])->name('emergencies.nearby-trips');
     });
