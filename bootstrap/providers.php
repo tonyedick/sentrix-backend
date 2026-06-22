@@ -33,6 +33,7 @@ return [
     App\Domains\Evidence\Providers\EvidenceServiceProvider::class,
     App\Domains\Retention\Providers\RetentionServiceProvider::class,
     App\Domains\Intel\Providers\IntelServiceProvider::class,
+    App\Domains\Webhooks\Providers\WebhooksServiceProvider::class,
 
     // Consumer modules (ADR-0001)
     App\Domains\Community\Providers\CommunityServiceProvider::class,

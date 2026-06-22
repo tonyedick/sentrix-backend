@@ -111,6 +111,9 @@ enum DefaultPermission: string
     case IntelView = 'intel.view';
     case IntelExport = 'intel.export';
 
+    // Webhooks — outbound partner-integration registry
+    case WebhooksManage = 'webhooks.manage';
+
     /**
      * @return list<string>
      */

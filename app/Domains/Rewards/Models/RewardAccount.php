@@ -22,6 +22,9 @@ final class RewardAccount extends Model
         'points_balance',
         'boost_multiplier',
         'boost_expires_at',
+        'streak_days',
+        'last_activity_on',
+        'premium_days_granted',
     ];
 
     /**
@@ -33,6 +36,8 @@ final class RewardAccount extends Model
     protected $attributes = [
         'points_balance' => 0,
         'boost_multiplier' => 1.0,
+        'streak_days' => 0,
+        'premium_days_granted' => 0,
     ];
 
     protected function casts(): array
@@ -41,6 +46,9 @@ final class RewardAccount extends Model
             'points_balance' => 'integer',
             'boost_multiplier' => 'float',
             'boost_expires_at' => 'datetime',
+            'streak_days' => 'integer',
+            'last_activity_on' => 'date',
+            'premium_days_granted' => 'integer',
         ];
     }
 

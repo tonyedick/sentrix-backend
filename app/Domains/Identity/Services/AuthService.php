@@ -7,6 +7,7 @@ namespace App\Domains\Identity\Services;
 use App\Domains\Identity\DTOs\LoginData;
 use App\Domains\Identity\DTOs\RegisterUserData;
 use App\Domains\Identity\Events\UserRegistered;
+use App\Domains\Organization\Models\Organization;
 use App\Models\User;
 use Illuminate\Auth\AuthManager;
 use Illuminate\Database\DatabaseManager;
@@ -110,5 +111,73 @@ final readonly class AuthService
         if ($token !== null && method_exists($token, 'delete')) {
             $token->delete();
         }
+    }
+
+    /**
+     * Rotate a signed-in user's password (re-auth with the current one).
+     *
+     * Token policy: unlike a password *reset* (which revokes every token, since
+     * the reset is initiated out-of-band and we cannot trust any session),
+     * a *self-service change* is initiated from an already-authenticated client,
+     * so we keep the CURRENT request's token alive and revoke only the user's
+     * OTHER tokens — the active device stays signed in while every other device
+     * is forced to re-authenticate.
+     *
+     * @throws ValidationException when the supplied current password is wrong.
+     */
+    public function changePassword(User $user, string $currentPassword, string $newPassword): void
+    {
+        if (! Hash::check($currentPassword, $user->password)) {
+            throw ValidationException::withMessages([
+                'current_password' => [__('The provided password is incorrect.')],
+            ]);
+        }
+
+        $this->db->transaction(function () use ($user, $newPassword): void {
+            // The 'hashed' cast on the User model hashes this on save.
+            $user->forceFill(['password' => $newPassword])->save();
+
+            $current = $user->currentAccessToken();
+            $currentId = ($current !== null && method_exists($current, 'getKey')) ? $current->getKey() : null;
+
+            // Revoke every OTHER personal access token; keep the current one.
+            $user->tokens()
+                ->when($currentId !== null, fn ($q) => $q->whereKeyNot($currentId))
+                ->delete();
+        });
+    }
+
+    /**
+     * NDPR/GDPR right-to-erasure: permanently delete the caller's account.
+     *
+     * Org-owner guard: a consumer who OWNS one or more organizations cannot be
+     * erased here, because organizations.owner_id cascades on delete — purging
+     * the user would silently destroy a whole tenant (and every record under
+     * it). We refuse with a 422 and instruct them to transfer ownership first.
+     *
+     * For an ordinary consumer (no owned org) we revoke every token and
+     * forceDelete() the user inside a transaction. forceDelete bypasses the
+     * SoftDeletes trait so the real DB row is removed, which fires the
+     * cascadeOnDelete foreign keys on the user's consumer rows (safety_contacts,
+     * saved_locations, recent_searches, social_accounts, ...).
+     *
+     * @throws ValidationException when the user still owns an organization.
+     */
+    public function deleteAccount(User $user): void
+    {
+        $ownedOrganizations = Organization::query()
+            ->where('owner_id', $user->getKey())
+            ->count();
+
+        if ($ownedOrganizations > 0) {
+            throw ValidationException::withMessages([
+                'account' => [__('You own an organization. Transfer ownership before deleting your account.')],
+            ]);
+        }
+
+        $this->db->transaction(function () use ($user): void {
+            $user->tokens()->delete();
+            $user->forceDelete();
+        });
     }
 }

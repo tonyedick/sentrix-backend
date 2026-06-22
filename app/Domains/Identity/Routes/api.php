@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Identity\Http\Controllers\AccountController;
 use App\Domains\Identity\Http\Controllers\AuthenticatedSessionController;
 use App\Domains\Identity\Http\Controllers\CurrentUserController;
 use App\Domains\Identity\Http\Controllers\EmailVerificationNotificationController;
@@ -52,6 +53,13 @@ Route::prefix('v1/auth')->group(function (): void {
     Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])->name('auth.logout');
         Route::get('me', [CurrentUserController::class, 'show'])->name('auth.me');
+
+        // NDPR/GDPR self-service (additive). Throttled like other credential ops.
+        Route::post('change-password', [AccountController::class, 'changePassword'])
+            ->middleware('throttle:6,1')
+            ->name('auth.change-password');
+        Route::get('me/export', [AccountController::class, 'export'])->name('auth.me.export');
+        Route::delete('me', [AccountController::class, 'destroy'])->name('auth.me.destroy');
 
         // Resend the verification link to the current user.
         Route::post('email/verification-notification', [EmailVerificationNotificationController::class, 'store'])

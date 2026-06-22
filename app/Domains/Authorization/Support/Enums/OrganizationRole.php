@@ -94,6 +94,7 @@ enum OrganizationRole: string
                 DefaultPermission::RetentionPurge->value,
                 DefaultPermission::IntelView->value,
                 DefaultPermission::IntelExport->value,
+                DefaultPermission::WebhooksManage->value,
             ],
             // Dispatchers monitor live activity and coordinate the response.
             self::Dispatcher => [

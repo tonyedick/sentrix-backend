@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Community\Http\Resources;
 
 use App\Domains\Community\Models\CommunityAlert;
+use App\Domains\Community\Support\Enums\AlertSource;
+use App\Domains\Community\Support\Enums\AlertStatus;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -25,6 +27,9 @@ final class CommunityAlertResource extends JsonResource
             'note' => $this->note,
             'impact' => $this->impact->value,
             'status' => $this->status->value,
+            'source' => ($this->source ?? AlertSource::Community)->value,
+            'verified' => ($this->source ?? AlertSource::Community)->isTrusted() || $this->status === AlertStatus::Active,
+            'confidence' => $this->confidence,
             'location' => [
                 'lat' => $this->lat,
                 'lng' => $this->lng,

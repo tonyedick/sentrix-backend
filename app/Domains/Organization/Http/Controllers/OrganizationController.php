@@ -62,7 +62,7 @@ final class OrganizationController extends Controller
         return OrganizationResource::make($organization);
     }
 
-    public function destroy(Request $request, Organization $organization): JsonResponse
+    public function destroy(Request $request, Organization $organization): Response
     {
         abort_unless(
             $request->user()->can(DefaultPermission::OrganizationDelete->value),
@@ -71,7 +71,7 @@ final class OrganizationController extends Controller
 
         $this->organizations->delete($organization);
 
-        return response()->json(status: Response::HTTP_NO_CONTENT);
+        return response()->noContent();
     }
 
     /**

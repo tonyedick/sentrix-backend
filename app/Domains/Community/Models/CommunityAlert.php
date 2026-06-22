@@ -6,6 +6,7 @@ namespace App\Domains\Community\Models;
 
 use App\Domains\Community\Support\Enums\AlertCategory;
 use App\Domains\Community\Support\Enums\AlertImpact;
+use App\Domains\Community\Support\Enums\AlertSource;
 use App\Domains\Community\Support\Enums\AlertStatus;
 use App\Domains\Shared\Concerns\HasUuid;
 use App\Models\User;
@@ -28,11 +29,26 @@ final class CommunityAlert extends Model
         'note',
         'impact',
         'status',
+        'source',
         'lat',
         'lng',
         'confirmations_count',
         'dismissals_count',
+        'confidence',
         'expires_at',
+    ];
+
+    /**
+     * In-memory defaults so a freshly created alert always has a `source` and
+     * `confidence` even before the DB round-trip (the DB column defaults only
+     * apply on insert, not on the returned model — without this the resource's
+     * `$this->source->value` would fatal on a just-created, un-refreshed model).
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'source' => 'community',
+        'confidence' => 0,
     ];
 
     protected function casts(): array
@@ -41,10 +57,12 @@ final class CommunityAlert extends Model
             'category' => AlertCategory::class,
             'impact' => AlertImpact::class,
             'status' => AlertStatus::class,
+            'source' => AlertSource::class,
             'lat' => 'float',
             'lng' => 'float',
             'confirmations_count' => 'integer',
             'dismissals_count' => 'integer',
+            'confidence' => 'integer',
             'expires_at' => 'datetime',
         ];
     }

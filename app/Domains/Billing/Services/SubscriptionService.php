@@ -6,9 +6,11 @@ namespace App\Domains\Billing\Services;
 
 use App\Domains\Billing\Contracts\PaymentProvider;
 use App\Domains\Billing\Models\Invoice;
+use App\Domains\Billing\Models\Payment;
 use App\Domains\Billing\Models\Subscription;
 use App\Models\User;
 use Illuminate\Database\DatabaseManager;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -114,6 +116,67 @@ final readonly class SubscriptionService
                 'current_period_end' => match ((string) ($plan['interval'] ?? 'none')) {
                     'month' => now()->addMonth(),
                     'year' => now()->addYear(),
+                    default => null,
+                },
+            ])->save();
+
+            $subscription->refresh();
+            $subscription->wasRecentlyCreated = false;
+
+            return $subscription;
+        });
+    }
+
+    /**
+     * Activate/extend a user's subscription from a completed PSP Payment, and
+     * record an invoice for the charge. Idempotent: a payment already marked
+     * paid is a no-op (returns the current subscription) so confirming the same
+     * reference twice via webhook + simulate never double-extends.
+     *
+     * The new period EXTENDS from the later of "now" and the current period end,
+     * so a paid renewal stacks on remaining time instead of truncating it.
+     */
+    public function activateFromPayment(Payment $payment): Subscription
+    {
+        return $this->db->transaction(function () use ($payment): Subscription {
+            /** @var Payment $payment */
+            $payment = Payment::query()->whereKey($payment->getKey())->lockForUpdate()->firstOrFail();
+
+            $subscription = Subscription::query()->where('user_id', $payment->user_id)->lockForUpdate()
+                ->firstOrCreate(['user_id' => $payment->user_id], ['plan_key' => 'free', 'status' => 'active']);
+
+            // Idempotency guard: already settled → activation already happened.
+            if ($payment->status === 'paid') {
+                $subscription->wasRecentlyCreated = false;
+
+                return $subscription;
+            }
+
+            $plan = $this->planConfig($payment->plan_key) ?? [];
+
+            $payment->forceFill(['status' => 'paid', 'paid_at' => now()])->save();
+
+            Invoice::create([
+                'user_id' => $payment->user_id,
+                'number' => 'INV-'.now()->format('Ymd').'-'.Str::upper(Str::random(5)),
+                'plan_key' => $payment->plan_key,
+                'amount_cents' => (int) $payment->amount_cents,
+                'currency' => $payment->currency,
+                'status' => 'paid',
+                'issued_at' => now(),
+            ]);
+
+            $base = $subscription->current_period_end instanceof Carbon && $subscription->current_period_end->isFuture()
+                ? $subscription->current_period_end->copy()
+                : now();
+
+            $subscription->forceFill([
+                'plan_key' => $payment->plan_key,
+                'status' => 'active',
+                'auto_renew' => true,
+                'current_period_end' => match ((string) ($plan['interval'] ?? 'none')) {
+                    'month' => $base->addMonth(),
+                    'year' => $base->addYear(),
                     default => null,
                 },
             ])->save();

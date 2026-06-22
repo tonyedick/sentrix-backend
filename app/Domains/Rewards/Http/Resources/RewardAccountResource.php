@@ -23,6 +23,9 @@ final class RewardAccountResource extends JsonResource
             'boost_multiplier' => $this->boost_multiplier,
             'boost_active' => $this->boostActive(),
             'boost_expires_at' => $this->boost_expires_at?->toIso8601String(),
+            'streak_days' => $this->streak_days,
+            'last_activity_on' => $this->last_activity_on?->toDateString(),
+            'premium_days_granted' => $this->premium_days_granted,
         ];
     }
 }

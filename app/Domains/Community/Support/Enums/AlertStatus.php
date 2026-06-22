@@ -6,6 +6,7 @@ namespace App\Domains\Community\Support\Enums;
 
 enum AlertStatus: string
 {
+    case Unverified = 'unverified';
     case Active = 'active';
     case Resolved = 'resolved';
     case Expired = 'expired';

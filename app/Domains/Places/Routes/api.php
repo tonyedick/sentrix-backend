@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Places\Http\Controllers\GeocodingController;
 use App\Domains\Places\Http\Controllers\PlaceController;
 use Illuminate\Support\Facades\Route;
 
@@ -11,5 +12,13 @@ use Illuminate\Support\Facades\Route;
  */
 Route::middleware('auth:sanctum')->prefix('v1')->group(function (): void {
     Route::get('places', [PlaceController::class, 'index'])->name('places.index');
+
+    // Server-side geocoding proxies (Google key never exposed; curated fallback
+    // when unset). Registered BEFORE the {place} wildcard so they aren't
+    // swallowed by route-model binding.
+    Route::get('places/autocomplete', [GeocodingController::class, 'autocomplete'])->name('places.autocomplete');
+    Route::get('places/geocode', [GeocodingController::class, 'geocode'])->name('places.geocode');
+    Route::get('places/nearby', [GeocodingController::class, 'nearby'])->name('places.nearby');
+
     Route::get('places/{place}', [PlaceController::class, 'show'])->name('places.show');
 });

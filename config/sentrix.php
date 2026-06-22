@@ -198,8 +198,13 @@ return [
 
     'community' => [
         'alert_ttl_seconds' => (int) env('SENTRIX_ALERT_TTL', 21600), // 6h
+        'official_ttl_seconds' => (int) env('SENTRIX_ALERT_OFFICIAL_TTL', 86400), // 24h
         'dismiss_threshold' => (int) env('SENTRIX_ALERT_DISMISS_THRESHOLD', 3),
+        // Trust-weighted verification thresholds over the signed confidence tally.
+        'confirm_threshold' => (int) env('SENTRIX_ALERT_CONFIRM_THRESHOLD', 3),
+        'dispute_threshold' => (int) env('SENTRIX_ALERT_DISPUTE_THRESHOLD', -2),
         'default_radius_m' => (int) env('SENTRIX_ALERT_RADIUS', 3000),
+        'safe_places_radius_m' => (int) env('SENTRIX_SAFE_PLACES_RADIUS', 5000),
     ],
 
     /*
@@ -210,6 +215,64 @@ return [
 
     'places' => [
         'default_radius_m' => (int) env('SENTRIX_PLACES_RADIUS', 5000),
+
+        // Google Maps Platform key for the server-side geocoding proxies
+        // (autocomplete / geocode / nearby). SERVER-SIDE ONLY — never shipped to
+        // the client. When UNSET (tests, local), every proxy endpoint falls back
+        // to a deterministic curated result so the surface always answers offline.
+        'google_api_key' => env('SENTRIX_PLACES_GOOGLE_API_KEY'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Rewards / gamification (consumer)
+    |--------------------------------------------------------------------------
+    |
+    | Points economy + gamification catalogues. Badges, missions, and premium
+    | packs are code/config-driven (no per-badge tables) — earned/progress state
+    | is DERIVED from the reward account + ledger at read time. `counter` maps a
+    | milestone to a derived metric (reports filed, trips completed, streak days,
+    | lifetime points). Points are integers; premium packs convert points → days.
+    |
+    */
+
+    'rewards' => [
+        // Leaderboard window: how many top users to surface (the caller's rank is
+        // always included even when outside the window).
+        'leaderboard_size' => (int) env('SENTRIX_REWARDS_LEADERBOARD_SIZE', 20),
+
+        // Badge catalogue. `counter` is a derived metric:
+        //   reports     — earn ledger entries reasoned 'report'/'verified_report'
+        //   trips        — earn ledger entries reasoned 'safe_trip'
+        //   verifications— earn ledger entries reasoned 'verify_alert'
+        //   streak_days  — current daily streak on the account
+        //   lifetime_points — sum of positive ledger movements
+        'badges' => [
+            ['id' => 'first_trip', 'name' => 'First Steps', 'description' => 'Complete your first safe trip', 'counter' => 'trips', 'target' => 1],
+            ['id' => 'road_warrior', 'name' => 'Road Warrior', 'description' => 'Complete 10 safe trips', 'counter' => 'trips', 'target' => 10],
+            ['id' => 'community_hero', 'name' => 'Community Hero', 'description' => 'File 10 community reports', 'counter' => 'reports', 'target' => 10],
+            ['id' => 'guardian_eye', 'name' => 'Guardian Eye', 'description' => 'Verify 25 nearby alerts', 'counter' => 'verifications', 'target' => 25],
+            ['id' => 'on_a_roll', 'name' => 'On a Roll', 'description' => 'Keep a 7-day safety streak', 'counter' => 'streak_days', 'target' => 7],
+            ['id' => 'point_collector', 'name' => 'Point Collector', 'description' => 'Earn 1000 lifetime points', 'counter' => 'lifetime_points', 'target' => 1000],
+        ],
+
+        // Daily/weekly mission catalogue. Progress derives from ledger activity
+        // within the rolling window (daily = today, weekly = last 7 days).
+        'missions' => [
+            ['id' => 'd_checkin', 'scope' => 'daily', 'title' => 'Open Sentrix and check in', 'points' => 10, 'counter' => 'checkin', 'target' => 1],
+            ['id' => 'd_verify2', 'scope' => 'daily', 'title' => 'Verify 2 nearby alerts', 'points' => 30, 'counter' => 'verify_alert', 'target' => 2],
+            ['id' => 'd_safetrip', 'scope' => 'daily', 'title' => 'Complete a safe trip', 'points' => 50, 'counter' => 'safe_trip', 'target' => 1],
+            ['id' => 'w_trips3', 'scope' => 'weekly', 'title' => 'Finish 3 monitored trips', 'points' => 150, 'counter' => 'safe_trip', 'target' => 3],
+            ['id' => 'w_report2', 'scope' => 'weekly', 'title' => 'Help with 2 community reports', 'points' => 90, 'counter' => 'report', 'target' => 2],
+        ],
+
+        // Points → Premium conversion packs. `cost` is integer points; `days` is
+        // the Premium entitlement granted.
+        'premium_packs' => [
+            'pp3' => ['days' => 3, 'cost' => 300],
+            'pp7' => ['days' => 7, 'cost' => 600],
+            'pp30' => ['days' => 30, 'cost' => 2000],
+        ],
     ],
 
     /*
@@ -287,6 +350,27 @@ return [
     'billing' => [
         'payment_driver' => env('SENTRIX_PAYMENT_DRIVER', 'log'),
         'currency' => env('SENTRIX_BILLING_CURRENCY', 'USD'),
+
+        // PSP checkout: shared HMAC secret used to sign + verify webhooks
+        // (X-Sentrix-Signature = HMAC-SHA256 of the RAW body). When UNSET the
+        // webhook is closed by default in production; the LogPaymentProvider only
+        // accepts unsigned webhooks in local/testing. `allow_simulated_checkout`
+        // opens the sandbox simulate endpoint outside local/testing (never in prod
+        // unless explicitly set).
+        'webhook_secret' => env('SENTRIX_BILLING_WEBHOOK_SECRET'),
+        'allow_simulated_checkout' => (bool) env('SENTRIX_BILLING_ALLOW_SIMULATED_CHECKOUT', false),
+
+        // Multi-region catalog. The plan price book above is authored in base
+        // minor units; each region localizes it via `rate` (an FX multiplier over
+        // the base price_cents), bills in `currency`, and adds a `tax_rate` line.
+        // Default region is NG. Amounts stay INTEGER CENTS at every step.
+        'regions' => [
+            'NG' => ['currency' => 'NGN', 'rate' => (float) env('SENTRIX_BILLING_RATE_NG', 1.0), 'tax_rate' => (float) env('SENTRIX_BILLING_TAX_NG', 0.075)],
+            'KE' => ['currency' => 'KES', 'rate' => (float) env('SENTRIX_BILLING_RATE_KE', 0.30), 'tax_rate' => (float) env('SENTRIX_BILLING_TAX_KE', 0.16)],
+            'US' => ['currency' => 'USD', 'rate' => (float) env('SENTRIX_BILLING_RATE_US', 0.0023), 'tax_rate' => (float) env('SENTRIX_BILLING_TAX_US', 0.0)],
+        ],
+        'default_region' => env('SENTRIX_BILLING_DEFAULT_REGION', 'NG'),
+
         'plans' => [
             'free' => [
                 'name' => 'Free',
