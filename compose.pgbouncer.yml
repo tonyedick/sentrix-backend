@@ -1,0 +1,41 @@
+# Optional PgBouncer connection pooler.
+#
+# Postgres allows ~100 connections by default; horizontally autoscaling the app +
+# Horizon workers exhausts that long before the DB is actually busy. PgBouncer in
+# transaction-pooling mode multiplexes many client connections onto a small pool
+# of real Postgres connections — the standard fix for connection scaling.
+#
+# Enable it (it is NOT part of the default stack so local dev is unchanged):
+#
+#   docker compose -f compose.yaml -f compose.override.yml -f compose.pgbouncer.yml up -d
+#
+# Then point the app at the pooler (in .env) and turn on prepared-statement
+# emulation (required for transaction pooling on PgBouncer < 1.21):
+#
+#   DB_HOST=pgbouncer
+#   DB_PORT=6432
+#   DB_READ_HOST=pgbouncer        # or your read-replica host(s)
+#   DB_EMULATE_PREPARES=true
+#
+# This file is a working starting point; tune AUTH_TYPE / pool sizes for your
+# environment (managed Postgres often provides PgBouncer already).
+services:
+    pgbouncer:
+        image: 'edoburu/pgbouncer:latest'
+        environment:
+            DB_HOST: pgsql
+            DB_PORT: 5432
+            DB_USER: '${DB_USERNAME:-sail}'
+            DB_PASSWORD: '${DB_PASSWORD:-password}'
+            DB_NAME: '${DB_DATABASE:-sentrix}'
+            POOL_MODE: transaction
+            AUTH_TYPE: scram-sha-256
+            MAX_CLIENT_CONN: '1000'
+            DEFAULT_POOL_SIZE: '25'
+            MIN_POOL_SIZE: '5'
+        ports:
+            - '6432:6432'
+        networks:
+            - sail
+        depends_on:
+            - pgsql

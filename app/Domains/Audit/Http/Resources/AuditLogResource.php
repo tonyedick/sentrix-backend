@@ -23,6 +23,7 @@ final class AuditLogResource extends JsonResource
             'action' => $this->action,
             'organization_id' => $this->organization_id,
             'actor_id' => $this->user_id,
+            'actor_name' => $this->whenLoaded('user', fn () => $this->user?->name),
             'subject' => $this->auditable_type === null ? null : [
                 'type' => class_basename($this->auditable_type),
                 'id' => $this->auditable_id,

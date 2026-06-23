@@ -74,6 +74,20 @@ final class EvidenceVaultTest extends TestCase
             ->assertJsonPath('data.0.plate', 'KJA-456-CV');
     }
 
+    public function test_search_filters_by_label_substring(): void
+    {
+        [$owner, $org] = $this->ownerWithOrganization();
+        $this->seedObservations($owner, $org);
+
+        // Exercises the `q` facet (label ILIKE '%term%'), backed by the
+        // observations_label_trgm trigram index.
+        $this->actingAs($owner, 'sanctum')
+            ->getJson("/api/v1/organizations/{$org}/evidence/search?q=red+jacket")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.label', 'man in red jacket');
+    }
+
     public function test_search_filters_by_date_range(): void
     {
         [$owner, $org] = $this->ownerWithOrganization();

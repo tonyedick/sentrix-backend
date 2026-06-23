@@ -34,6 +34,7 @@ final class ResponderController extends Controller
         abort_unless($request->user()->can(DefaultPermission::RespondersView->value), Response::HTTP_FORBIDDEN);
 
         $responders = Responder::query()
+            ->with('user')
             ->where('organization_id', $organization->getKey())
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')->value()))
             ->when($request->boolean('assignable'), fn ($query) => $query->assignable())
@@ -74,7 +75,7 @@ final class ResponderController extends Controller
         $this->assertResponderInOrganization($organization, $responder);
         abort_unless($request->user()->can(DefaultPermission::RespondersView->value), Response::HTTP_FORBIDDEN);
 
-        return ResponderResource::make($responder->load('currentAssignment.incident'));
+        return ResponderResource::make($responder->load(['user', 'currentAssignment.incident']));
     }
 
     public function changeStatus(ChangeResponderStatusRequest $request, Organization $organization, Responder $responder): ResponderResource

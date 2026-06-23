@@ -11,8 +11,16 @@ return Application::configure(basePath: dirname(__DIR__))
         web: __DIR__.'/../routes/web.php',
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
-        channels: __DIR__.'/../routes/channels.php',
         health: '/up',
+    )
+    // Register the /broadcasting/auth endpoint for private-channel subscription.
+    // Authorize with the Sanctum guard so cross-origin SPA clients can subscribe
+    // with a bearer token. Deliberately NOT the 'api' middleware group — that
+    // group's WrapApiResponse would wrap the `{ auth: ... }` body in the platform
+    // envelope and break Echo/Pusher subscription.
+    ->withBroadcasting(
+        __DIR__.'/../routes/channels.php',
+        ['middleware' => ['auth:sanctum']],
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Enables stateful (cookie/session) auth for the Inertia SPA on /api/*

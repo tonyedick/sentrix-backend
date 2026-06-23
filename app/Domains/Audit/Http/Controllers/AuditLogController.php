@@ -27,13 +27,18 @@ final class AuditLogController extends Controller
         );
 
         $logs = AuditLog::query()
+            ->with('user')
             ->where('organization_id', $organization->getKey())
             ->when(
                 $request->filled('action'),
                 fn ($query) => $query->where('action', $request->string('action')->value()),
             )
-            ->latest('created_at')
-            ->paginate($this->perPage($request));
+            // Cursor (keyset) pagination: O(1) regardless of depth and no
+            // COUNT(*) on a large append-only table. Order includes the unique
+            // id as a tiebreaker so the cursor is stable when created_at ties.
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->cursorPaginate($this->perPage($request));
 
         return AuditLogResource::collection($logs);
     }

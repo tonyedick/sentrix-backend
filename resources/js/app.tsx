@@ -8,6 +8,11 @@ import { AppRouter } from '@/router';
 import { ToastViewport } from '@/components/ui/Toast';
 import '@/echo';
 import '../css/app.css';
+import { configureEcho } from '@laravel/echo-react';
+
+configureEcho({
+    broadcaster: 'reverb',
+});
 
 const container = document.getElementById('app');
 if (container) {

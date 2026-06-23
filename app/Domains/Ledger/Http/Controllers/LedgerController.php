@@ -17,6 +17,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -34,7 +35,10 @@ final class LedgerController extends Controller
     {
         $this->assertSuperAdmin($request);
 
-        return response()->json(['data' => $this->ledger->stats()]);
+        // Cached briefly (Redis): a full scan of sources + write counts.
+        $data = Cache::remember('ledger:stats', 30, fn () => $this->ledger->stats());
+
+        return response()->json(['data' => $data]);
     }
 
     public function writes(Request $request): AnonymousResourceCollection

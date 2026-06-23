@@ -23,6 +23,8 @@ final class ResponderResource extends JsonResource
             'id' => $this->id,
             'organization_id' => $this->organization_id,
             'user_id' => $this->user_id,
+            'user_name' => $this->whenLoaded('user', fn () => $this->user?->name),
+            'user_email' => $this->whenLoaded('user', fn () => $this->user?->email),
             'status' => $this->status->value,
             'on_duty' => $this->on_duty,
             'assignable' => $this->status->isAssignable(),

@@ -12,20 +12,23 @@ use App\Domains\Organization\Models\Organization;
 use App\Domains\Trip\Models\Trip;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * The Intel reporting/analytics aggregation layer. Read-only: it rolls up over
  * the operational domains (incidents, emergencies, trips, evidence) and owns no
  * primary entity. Every query is scoped by organization_id.
  *
+ * Aggregation happens in SQL (GROUP BY / date_trunc / percentile_cont / a
+ * round()-grid heatmap) rather than by loading rows into PHP — so memory and
+ * latency stay flat as data volume grows. The response shape is unchanged from
+ * the previous in-PHP implementation (see IntelReportingTest).
+ *
  * Response-time methodology (documented):
  *   - Incidents: opened_at -> earliest AssignmentResponder.accepted_at for that
- *     incident (the first responder acceptance is the cleanest per-incident
- *     dispatch timestamp the models expose; the Incident itself has no
- *     dispatched/acknowledged column, only escalated/resolved/closed).
+ *     incident (the cleanest per-incident dispatch timestamp the models expose).
  *   - Emergencies: triggered_at -> acknowledged_at.
- * Carbon 3's diff* helpers return floats; all durations are cast to whole int
- * seconds.
+ * Durations are whole-second integers; average/median are null when unmeasured.
  */
 final readonly class IntelReportService
 {
@@ -36,27 +39,13 @@ final readonly class IntelReportService
      */
     public function report(Organization $organization, CarbonInterface $since): array
     {
-        $orgId = $organization->getKey();
+        $orgId = (string) $organization->getKey();
+        $sinceTs = $since->toDateTimeString();
 
-        $incidents = Incident::query()
-            ->where('organization_id', $orgId)
-            ->where('opened_at', '>=', $since)
-            ->get(['id', 'status', 'severity', 'opened_at']);
-
-        $emergencies = Emergency::query()
-            ->where('organization_id', $orgId)
-            ->where('triggered_at', '>=', $since)
-            ->get(['id', 'status', 'severity', 'triggered_at', 'acknowledged_at']);
-
-        $tripsCount = Trip::query()
-            ->where('organization_id', $orgId)
-            ->where('created_at', '>=', $since)
-            ->count();
-
-        $observations = Observation::query()
-            ->where('organization_id', $orgId)
-            ->where('observed_at', '>=', $since)
-            ->get(['id', 'camera_source_id', 'severity', 'lat', 'lng']);
+        $incidents = (new Incident)->getTable();
+        $emergencies = (new Emergency)->getTable();
+        $trips = (new Trip)->getTable();
+        $observations = (new Observation)->getTable();
 
         return [
             'range' => [
@@ -64,22 +53,22 @@ final readonly class IntelReportService
                 'until' => Carbon::now()->toIso8601String(),
             ],
             'incidents' => [
-                'total' => $incidents->count(),
-                'by_severity' => $this->countBy($incidents, 'severity'),
-                'by_status' => $this->countBy($incidents, 'status'),
+                'total' => $this->total($incidents, $orgId, 'opened_at', $sinceTs),
+                'by_severity' => $this->grouped($incidents, $orgId, 'opened_at', $sinceTs, 'severity'),
+                'by_status' => $this->grouped($incidents, $orgId, 'opened_at', $sinceTs, 'status'),
             ],
             'emergencies' => [
-                'total' => $emergencies->count(),
-                'by_status' => $this->countBy($emergencies, 'status'),
+                'total' => $this->total($emergencies, $orgId, 'triggered_at', $sinceTs),
+                'by_status' => $this->grouped($emergencies, $orgId, 'triggered_at', $sinceTs, 'status'),
             ],
             'trips' => [
-                'total' => $tripsCount,
+                'total' => $this->total($trips, $orgId, 'created_at', $sinceTs),
             ],
             'observations' => [
-                'total' => $observations->count(),
+                'total' => $this->total($observations, $orgId, 'observed_at', $sinceTs),
             ],
-            'response_time_seconds' => $this->responseTimeStats($incidents, $emergencies),
-            'top_zones' => $this->topZones($observations),
+            'response_time_seconds' => $this->responseTimes($orgId, $sinceTs),
+            'top_zones' => $this->topZones($orgId, $sinceTs),
         ];
     }
 
@@ -90,22 +79,12 @@ final readonly class IntelReportService
      */
     public function analytics(Organization $organization, CarbonInterface $since, string $bucket): array
     {
-        $orgId = $organization->getKey();
+        $orgId = (string) $organization->getKey();
+        $sinceTs = $since->toDateTimeString();
 
-        $incidents = Incident::query()
-            ->where('organization_id', $orgId)
-            ->where('opened_at', '>=', $since)
-            ->get(['id', 'status', 'severity', 'opened_at']);
-
-        $emergencies = Emergency::query()
-            ->where('organization_id', $orgId)
-            ->where('triggered_at', '>=', $since)
-            ->get(['id', 'status', 'severity', 'triggered_at', 'lat', 'lng']);
-
-        $observations = Observation::query()
-            ->where('organization_id', $orgId)
-            ->where('observed_at', '>=', $since)
-            ->get(['id', 'kind', 'severity', 'lat', 'lng']);
+        $incidents = (new Incident)->getTable();
+        $emergencies = (new Emergency)->getTable();
+        $observations = (new Observation)->getTable();
 
         return [
             'range' => [
@@ -114,191 +93,185 @@ final readonly class IntelReportService
                 'bucket' => $bucket,
             ],
             'trends' => [
-                'incidents' => $this->trend($incidents, 'opened_at', $bucket),
-                'emergencies' => $this->trend($emergencies, 'triggered_at', $bucket),
+                'incidents' => $this->trend($incidents, $orgId, 'opened_at', $sinceTs, $bucket),
+                'emergencies' => $this->trend($emergencies, $orgId, 'triggered_at', $sinceTs, $bucket),
             ],
             'breakdowns' => [
-                'incidents_by_severity' => $this->countBy($incidents, 'severity'),
-                'emergencies_by_severity' => $this->countBy($emergencies, 'severity'),
-                'observations_by_kind' => $this->countBy($observations, 'kind'),
+                'incidents_by_severity' => $this->grouped($incidents, $orgId, 'opened_at', $sinceTs, 'severity'),
+                'emergencies_by_severity' => $this->grouped($emergencies, $orgId, 'triggered_at', $sinceTs, 'severity'),
+                'observations_by_kind' => $this->grouped($observations, $orgId, 'observed_at', $sinceTs, 'kind'),
             ],
-            'heatmap' => $this->heatmap($observations->concat($emergencies)),
+            'heatmap' => $this->heatmap($orgId, $sinceTs),
         ];
     }
 
+    /** Row count for a table over [since, now], org-scoped. */
+    private function total(string $table, string $orgId, string $tsColumn, string $sinceTs): int
+    {
+        return (int) DB::scalar(
+            "select count(*) from {$table} where organization_id = ? and {$tsColumn} >= ?",
+            [$orgId, $sinceTs],
+        );
+    }
+
     /**
-     * Count grouped by an enum/string column, keyed by the scalar value.
+     * Count grouped by a column (null -> 'unknown'), keyed by the value.
      *
-     * @param  \Illuminate\Support\Collection<int, \Illuminate\Database\Eloquent\Model>  $rows
      * @return array<string, int>
      */
-    private function countBy($rows, string $column): array
+    private function grouped(string $table, string $orgId, string $tsColumn, string $sinceTs, string $column): array
     {
-        return $rows
-            ->groupBy(static function ($row) use ($column): string {
-                $value = $row->{$column};
+        $rows = DB::select(
+            "select coalesce({$column}::text, 'unknown') as k, count(*) as c "
+            ."from {$table} where organization_id = ? and {$tsColumn} >= ? group by 1",
+            [$orgId, $sinceTs],
+        );
 
-                if ($value instanceof \BackedEnum) {
-                    return (string) $value->value;
-                }
+        $out = [];
+        foreach ($rows as $row) {
+            $out[$row->k] = (int) $row->c;
+        }
 
-                return $value === null ? 'unknown' : (string) $value;
-            })
-            ->map(static fn ($group): int => $group->count())
-            ->all();
+        return $out;
     }
 
     /**
-     * Time-bucketed counts (oldest first).
+     * Time-bucketed counts (oldest first). Bucket strings match the previous
+     * implementation: "YYYY-MM-DD" by day, "YYYY-MM-DDTHH:00" by hour.
      *
-     * @param  \Illuminate\Support\Collection<int, \Illuminate\Database\Eloquent\Model>  $rows
      * @return list<array{bucket: string, count: int}>
      */
-    private function trend($rows, string $timestampColumn, string $bucket): array
+    private function trend(string $table, string $orgId, string $tsColumn, string $sinceTs, string $bucket): array
     {
-        $format = $bucket === 'hour' ? 'Y-m-d\TH:00' : 'Y-m-d';
+        $trunc = $bucket === 'hour' ? 'hour' : 'day';
+        $fmt = $bucket === 'hour' ? 'YYYY-MM-DD"T"HH24":00"' : 'YYYY-MM-DD';
 
-        return $rows
-            ->filter(static fn ($row): bool => $row->{$timestampColumn} !== null)
-            ->groupBy(static fn ($row): string => $row->{$timestampColumn}->format($format))
-            ->map(static fn ($group, string $key): array => [
-                'bucket' => $key,
-                'count' => $group->count(),
-            ])
-            ->sortKeys()
-            ->values()
-            ->all();
+        $rows = DB::select(
+            "select to_char(date_trunc('{$trunc}', {$tsColumn}), '{$fmt}') as bucket, count(*) as c "
+            ."from {$table} where organization_id = ? and {$tsColumn} >= ? and {$tsColumn} is not null "
+            .'group by 1 order by 1',
+            [$orgId, $sinceTs],
+        );
+
+        return array_map(
+            static fn ($row): array => ['bucket' => $row->bucket, 'count' => (int) $row->c],
+            $rows,
+        );
     }
 
     /**
-     * Response-time stats for incidents (opened -> first responder accept) and
-     * emergencies (triggered -> acknowledged). All durations whole-second ints.
+     * Response-time stats computed in SQL.
      *
-     * @param  \Illuminate\Support\Collection<int, Incident>  $incidents
-     * @param  \Illuminate\Support\Collection<int, Emergency>  $emergencies
      * @return array<string, mixed>
      */
-    private function responseTimeStats($incidents, $emergencies): array
+    private function responseTimes(string $orgId, string $sinceTs): array
     {
-        $incidentSeconds = [];
+        $incidents = (new Incident)->getTable();
+        $emergencies = (new Emergency)->getTable();
+        $responders = (new AssignmentResponder)->getTable();
 
-        $firstAccept = AssignmentResponder::query()
-            ->whereIn('incident_id', $incidents->pluck('id'))
-            ->whereNotNull('accepted_at')
-            ->get(['incident_id', 'accepted_at'])
-            ->groupBy('incident_id')
-            ->map(static fn ($rows) => $rows->pluck('accepted_at')->filter()->min());
+        $incidentSeconds = "select abs(extract(epoch from (min(ar.accepted_at) - i.opened_at))) as secs "
+            ."from {$incidents} i "
+            ."join {$responders} ar on ar.incident_id = i.id and ar.accepted_at is not null "
+            .'where i.organization_id = ? and i.opened_at >= ? and i.opened_at is not null '
+            .'group by i.id, i.opened_at';
 
-        foreach ($incidents as $incident) {
-            $acceptedAt = $firstAccept->get($incident->id);
-            if ($acceptedAt === null || $incident->opened_at === null) {
-                continue;
-            }
-            // Carbon 3: diffInSeconds() returns a float — normalise to whole seconds.
-            $incidentSeconds[] = (int) abs($incident->opened_at->diffInSeconds($acceptedAt));
-        }
-
-        $emergencySeconds = [];
-        foreach ($emergencies as $emergency) {
-            if ($emergency->triggered_at === null || $emergency->acknowledged_at === null) {
-                continue;
-            }
-            $emergencySeconds[] = (int) abs($emergency->triggered_at->diffInSeconds($emergency->acknowledged_at));
-        }
-
-        $combined = array_merge($incidentSeconds, $emergencySeconds);
+        $emergencySeconds = 'select abs(extract(epoch from (acknowledged_at - triggered_at))) as secs '
+            ."from {$emergencies} "
+            .'where organization_id = ? and triggered_at >= ? '
+            .'and triggered_at is not null and acknowledged_at is not null';
 
         return [
             'methodology' => 'incident: opened_at -> first AssignmentResponder.accepted_at; emergency: triggered_at -> acknowledged_at',
-            'incident_dispatch' => $this->durationSummary($incidentSeconds),
-            'emergency_acknowledge' => $this->durationSummary($emergencySeconds),
-            'combined' => $this->durationSummary($combined),
+            'incident_dispatch' => $this->durationStats($incidentSeconds, [$orgId, $sinceTs]),
+            'emergency_acknowledge' => $this->durationStats($emergencySeconds, [$orgId, $sinceTs]),
+            'combined' => $this->durationStats(
+                "({$incidentSeconds}) union all ({$emergencySeconds})",
+                [$orgId, $sinceTs, $orgId, $sinceTs],
+            ),
         ];
     }
 
     /**
-     * @param  list<int>  $seconds
+     * count / average / median over a subquery that yields a single `secs`
+     * column. average and median are null when nothing was measured.
+     *
+     * @param  list<mixed>  $bindings
      * @return array{measured: int, average: ?int, median: ?int}
      */
-    private function durationSummary(array $seconds): array
+    private function durationStats(string $secondsSql, array $bindings): array
     {
+        $row = DB::selectOne(
+            'select count(*) as measured, '
+            .'round(avg(secs))::int as average, '
+            .'round(percentile_cont(0.5) within group (order by secs))::int as median '
+            ."from ({$secondsSql}) as t",
+            $bindings,
+        );
+
         return [
-            'measured' => count($seconds),
-            'average' => $seconds === [] ? null : (int) round(array_sum($seconds) / count($seconds)),
-            'median' => $this->median($seconds),
+            'measured' => (int) ($row->measured ?? 0),
+            'average' => isset($row->average) ? (int) $row->average : null,
+            'median' => isset($row->median) ? (int) $row->median : null,
         ];
     }
 
     /**
-     * @param  list<int>  $values
-     */
-    private function median(array $values): ?int
-    {
-        if ($values === []) {
-            return null;
-        }
-        sort($values);
-        $count = count($values);
-        $mid = intdiv($count, 2);
-
-        return $count % 2 === 0
-            ? (int) round(($values[$mid - 1] + $values[$mid]) / 2)
-            : (int) $values[$mid];
-    }
-
-    /**
-     * Top observation hotspots. Observations and Emergencies expose lat/lng but
-     * Incidents carry no zone/site/coords column, so the period report groups by
-     * camera_source_id (top cameras) — the only stable site-like grouping key.
+     * Top observation hotspots by camera (the only stable site-like key).
      *
-     * @param  \Illuminate\Support\Collection<int, Observation>  $observations
      * @return list<array{camera_source_id: ?string, count: int}>
      */
-    private function topZones($observations): array
+    private function topZones(string $orgId, string $sinceTs): array
     {
-        return $observations
-            ->groupBy(static fn ($row): string => $row->camera_source_id ?? 'unknown')
-            ->map(static fn ($group, string $key): array => [
-                'camera_source_id' => $key === 'unknown' ? null : $key,
-                'count' => $group->count(),
-            ])
-            ->sortByDesc('count')
-            ->values()
-            ->take(10)
-            ->all();
+        $observations = (new Observation)->getTable();
+
+        $rows = DB::select(
+            "select camera_source_id, count(*) as c from {$observations} "
+            .'where organization_id = ? and observed_at >= ? '
+            .'group by camera_source_id order by c desc, camera_source_id nulls last limit 10',
+            [$orgId, $sinceTs],
+        );
+
+        return array_map(
+            static fn ($row): array => [
+                'camera_source_id' => $row->camera_source_id,
+                'count' => (int) $row->c,
+            ],
+            $rows,
+        );
     }
 
     /**
-     * A coarse coordinate heatmap: counts grouped into ~0.01-degree lat/lng
-     * cells (no zone/site column exists, only coords). Rows without coords are
-     * dropped.
+     * Coarse coordinate heatmap: counts grouped into ~0.01° lat/lng cells across
+     * observations + emergencies. Rows without coords are dropped.
      *
-     * @param  \Illuminate\Support\Collection<int, \Illuminate\Database\Eloquent\Model>  $rows
      * @return list<array{cell: string, lat: float, lng: float, count: int}>
      */
-    private function heatmap($rows): array
+    private function heatmap(string $orgId, string $sinceTs): array
     {
-        return $rows
-            ->filter(static fn ($row): bool => $row->lat !== null && $row->lng !== null)
-            ->groupBy(static function ($row): string {
-                $lat = round((float) $row->lat, 2);
-                $lng = round((float) $row->lng, 2);
+        $observations = (new Observation)->getTable();
+        $emergencies = (new Emergency)->getTable();
 
-                return $lat.','.$lng;
-            })
-            ->map(static function ($group, string $key): array {
-                [$lat, $lng] = explode(',', $key);
+        $sql = 'select cell, lat, lng, count(*) as c from ('
+            .'select round(lat::numeric, 2)::float8 as lat, round(lng::numeric, 2)::float8 as lng, '
+            ."round(lat::numeric, 2)::float8::text || ',' || round(lng::numeric, 2)::float8::text as cell "
+            ."from {$observations} where organization_id = ? and observed_at >= ? and lat is not null and lng is not null "
+            .'union all '
+            .'select round(lat::numeric, 2)::float8, round(lng::numeric, 2)::float8, '
+            ."round(lat::numeric, 2)::float8::text || ',' || round(lng::numeric, 2)::float8::text "
+            ."from {$emergencies} where organization_id = ? and triggered_at >= ? and lat is not null and lng is not null"
+            .') p group by cell, lat, lng order by c desc limit 50';
 
-                return [
-                    'cell' => $key,
-                    'lat' => (float) $lat,
-                    'lng' => (float) $lng,
-                    'count' => $group->count(),
-                ];
-            })
-            ->sortByDesc('count')
-            ->values()
-            ->take(50)
-            ->all();
+        $rows = DB::select($sql, [$orgId, $sinceTs, $orgId, $sinceTs]);
+
+        return array_map(
+            static fn ($row): array => [
+                'cell' => $row->cell,
+                'lat' => (float) $row->lat,
+                'lng' => (float) $row->lng,
+                'count' => (int) $row->c,
+            ],
+            $rows,
+        );
     }
 }

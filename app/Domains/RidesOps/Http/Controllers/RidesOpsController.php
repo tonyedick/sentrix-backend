@@ -19,6 +19,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -40,7 +41,10 @@ final class RidesOpsController extends Controller
     {
         $this->assertSuperAdmin($request);
 
-        return response()->json(['data' => $this->ops->overview()]);
+        // Cached briefly (Redis): several grouped aggregates over rides/drivers.
+        $data = Cache::remember('rides-ops:overview', 30, fn () => $this->ops->overview());
+
+        return response()->json(['data' => $data]);
     }
 
     public function rides(Request $request): AnonymousResourceCollection

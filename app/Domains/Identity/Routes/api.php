@@ -52,7 +52,14 @@ Route::prefix('v1/auth')->group(function (): void {
     // Authenticated (token or SPA session).
     Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])->name('auth.logout');
-        Route::get('me', [CurrentUserController::class, 'show'])->name('auth.me');
+
+        // Org-aware: `organization.team` resolves the active org (X-Organization
+        // header, else the user's current_organization_id) and sets the Spatie
+        // team context, so the principal's roles/permissions are returned
+        // org-scoped. Falls back to global scope when the user has no org.
+        Route::get('me', [CurrentUserController::class, 'show'])
+            ->middleware('organization.team')
+            ->name('auth.me');
 
         // NDPR/GDPR self-service (additive). Throttled like other credential ops.
         Route::post('change-password', [AccountController::class, 'changePassword'])

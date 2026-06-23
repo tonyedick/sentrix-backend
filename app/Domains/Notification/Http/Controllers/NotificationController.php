@@ -23,7 +23,10 @@ final class NotificationController extends Controller
         $notifications = $request->user()
             ->notifications()
             ->when($request->boolean('unread'), fn ($query) => $query->whereNull('read_at'))
-            ->paginate($this->perPage($request));
+            // Cursor (keyset) pagination — stable, COUNT-free feed scrolling.
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->cursorPaginate($this->perPage($request));
 
         return NotificationResource::collection($notifications);
     }

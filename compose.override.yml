@@ -1,0 +1,10 @@
+services:
+    laravel.test:
+        # Realtime hardening: replace Sail's default supervisor config with one
+        # that also runs Reverb (WebSocket) + Horizon (queued broadcasts), so they
+        # start with the container and survive `sail up` / `restart`. Reverb is
+        # published on 8080 for the browser; the app reaches it on localhost:8080.
+        ports:
+            - '8080:8080'
+        volumes:
+            - './docker/supervisord.conf:/etc/supervisor/conf.d/supervisord.conf'

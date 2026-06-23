@@ -11,6 +11,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -30,33 +31,43 @@ final class IntelController extends Controller
 
     private const DEFAULT_RANGE = '7d';
 
+    /**
+     * Cache TTL (seconds) for the computed roll-ups. Short, so dashboards that
+     * poll don't re-run the aggregates every request while staying near-live.
+     * Writes are reflected on the next refresh after the window elapses.
+     */
+    private const CACHE_TTL = 30;
+
     public function __construct(private readonly IntelReportService $intel) {}
 
     public function report(Request $request, Organization $organization): JsonResponse
     {
         abort_unless($request->user()->can(DefaultPermission::IntelView->value), Response::HTTP_FORBIDDEN);
 
-        $since = $this->resolveSince($request);
-
-        return response()->json(['data' => $this->intel->report($organization, $since)]);
+        return response()->json(['data' => $this->cachedReport($request, $organization)]);
     }
 
     public function analytics(Request $request, Organization $organization): JsonResponse
     {
         abort_unless($request->user()->can(DefaultPermission::IntelView->value), Response::HTTP_FORBIDDEN);
 
-        $since = $this->resolveSince($request);
+        $range = $this->rangeLabel($request);
         $bucket = $this->resolveBucket($request);
 
-        return response()->json(['data' => $this->intel->analytics($organization, $since, $bucket)]);
+        $data = Cache::remember(
+            "intel:analytics:{$organization->getKey()}:{$range}:{$bucket}",
+            self::CACHE_TTL,
+            fn (): array => $this->intel->analytics($organization, $this->resolveSince($request), $bucket),
+        );
+
+        return response()->json(['data' => $data]);
     }
 
     public function export(Request $request, Organization $organization): Response
     {
         abort_unless($request->user()->can(DefaultPermission::IntelExport->value), Response::HTTP_FORBIDDEN);
 
-        $since = $this->resolveSince($request);
-        $report = $this->intel->report($organization, $since);
+        $report = $this->cachedReport($request, $organization);
 
         // format=json returns the same report as JSON (still wrapped by the
         // envelope). Default + format=csv streams a CSV download — WrapApiResponse
@@ -109,6 +120,30 @@ final class IntelController extends Controller
             'Content-Type' => 'text/csv',
             'Content-Disposition' => 'attachment; filename="'.$filename.'"',
         ]);
+    }
+
+    /**
+     * The period report, memoised per org+range for CACHE_TTL.
+     *
+     * @return array<string, mixed>
+     */
+    private function cachedReport(Request $request, Organization $organization): array
+    {
+        $range = $this->rangeLabel($request);
+
+        return Cache::remember(
+            "intel:report:{$organization->getKey()}:{$range}",
+            self::CACHE_TTL,
+            fn (): array => $this->intel->report($organization, $this->resolveSince($request)),
+        );
+    }
+
+    /** Normalised range token used in cache keys (unknown -> default). */
+    private function rangeLabel(Request $request): string
+    {
+        $range = $request->string('range')->value();
+
+        return array_key_exists($range, self::RANGES) ? $range : self::DEFAULT_RANGE;
     }
 
     /**

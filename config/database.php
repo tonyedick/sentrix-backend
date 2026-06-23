@@ -87,7 +87,27 @@ return [
         'pgsql' => [
             'driver' => 'pgsql',
             'url' => env('DB_URL'),
-            'host' => env('DB_HOST', '127.0.0.1'),
+
+            // Read/write split. Reads are sent to DB_READ_HOST (comma-separated
+            // for multiple replicas) when it is set; otherwise both read and
+            // write point at DB_HOST — a single instance, with zero behavioural
+            // change until a replica actually exists. `sticky` keeps reads on the
+            // write connection for the rest of a request once a write has
+            // happened, so an operator never reads data they just wrote.
+            'read' => [
+                'host' => array_map(
+                    'trim',
+                    explode(',', (string) env('DB_READ_HOST', (string) env('DB_HOST', '127.0.0.1'))),
+                ),
+            ],
+            'write' => [
+                'host' => array_map(
+                    'trim',
+                    explode(',', (string) env('DB_HOST', '127.0.0.1')),
+                ),
+            ],
+            'sticky' => true,
+
             'port' => env('DB_PORT', '5432'),
             'database' => env('DB_DATABASE', 'laravel'),
             'username' => env('DB_USERNAME', 'root'),
@@ -97,6 +117,14 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+
+            // When fronting Postgres with PgBouncer in transaction-pooling mode,
+            // set DB_EMULATE_PREPARES=true so PDO doesn't rely on server-side
+            // named prepared statements (which don't survive pooled connections
+            // on PgBouncer < 1.21). No effect on a direct connection.
+            'options' => array_filter([
+                PDO::ATTR_EMULATE_PREPARES => env('DB_EMULATE_PREPARES', false) ? true : null,
+            ], static fn ($v) => $v !== null),
         ],
 
         'sqlsrv' => [

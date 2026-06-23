@@ -77,8 +77,11 @@ final class LocationController extends Controller
 
         $locations = TripLocation::query()
             ->where('trip_id', $trip->getKey())
+            // Cursor (keyset) pagination over the partitioned, high-write track —
+            // the right tool for scrolling long location histories. id tiebreaks.
             ->orderByDesc('recorded_at')
-            ->paginate($this->perPage($request));
+            ->orderByDesc('id')
+            ->cursorPaginate($this->perPage($request));
 
         return TripLocationResource::collection($locations);
     }

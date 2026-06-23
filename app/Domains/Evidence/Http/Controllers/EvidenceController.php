@@ -20,6 +20,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -33,6 +34,9 @@ use Symfony\Component\HttpFoundation\Response;
  */
 final class EvidenceController extends Controller
 {
+    /** Cache TTL (seconds) for the vault stats roll-up. */
+    private const STATS_CACHE_TTL = 30;
+
     /**
      * Attribute facets that map onto a key inside the `attributes` jsonb bag.
      * Each is matched with a case-insensitive substring on the extracted text.
@@ -85,8 +89,11 @@ final class EvidenceController extends Controller
         $this->applyFacets($request, $query);
 
         $observations = $query
-            ->latest('observed_at')
-            ->paginate($this->perPage($request));
+            // Cursor (keyset) pagination: index-friendly and COUNT-free over a
+            // potentially huge observations table. id tiebreaks equal timestamps.
+            ->orderByDesc('observed_at')
+            ->orderByDesc('id')
+            ->cursorPaginate($this->perPage($request));
 
         return ObservationResource::collection($observations);
     }
@@ -141,35 +148,41 @@ final class EvidenceController extends Controller
     {
         abort_unless($request->user()->can(DefaultPermission::EvidenceView->value), Response::HTTP_FORBIDDEN);
 
-        $base = static fn (): Builder => Observation::query()->where('organization_id', $organization->getKey());
+        // Cached briefly (Redis): several aggregate scans that dashboards poll.
+        // Writes (hold/bookmark/observe) surface on the next refresh after the
+        // window elapses.
+        $data = Cache::remember(
+            "evidence:stats:{$organization->getKey()}",
+            self::STATS_CACHE_TTL,
+            static function () use ($organization): array {
+                $base = static fn (): Builder => Observation::query()
+                    ->where('organization_id', $organization->getKey());
 
-        $byKind = $base()
-            ->selectRaw('kind, count(*) as aggregate')
-            ->groupBy('kind')
-            ->pluck('aggregate', 'kind')
-            ->all();
+                return [
+                    'total' => $base()->count(),
+                    'by_kind' => $base()
+                        ->selectRaw('kind, count(*) as aggregate')
+                        ->groupBy('kind')
+                        ->pluck('aggregate', 'kind')
+                        ->all(),
+                    'by_retention_tier' => $base()
+                        ->selectRaw('retention_tier, count(*) as aggregate')
+                        ->groupBy('retention_tier')
+                        ->pluck('aggregate', 'retention_tier')
+                        ->all(),
+                    'on_legal_hold' => $base()->where('hold', true)->count(),
+                    'bookmarked' => $base()->where('bookmarked', true)->count(),
+                    // Awaiting review: not yet bookmarked, sealed, or held.
+                    'awaiting_review' => $base()
+                        ->where('bookmarked', false)
+                        ->where('sealed', false)
+                        ->where('hold', false)
+                        ->count(),
+                ];
+            },
+        );
 
-        $byTier = $base()
-            ->selectRaw('retention_tier, count(*) as aggregate')
-            ->groupBy('retention_tier')
-            ->pluck('aggregate', 'retention_tier')
-            ->all();
-
-        return response()->json([
-            'data' => [
-                'total' => $base()->count(),
-                'by_kind' => $byKind,
-                'by_retention_tier' => $byTier,
-                'on_legal_hold' => $base()->where('hold', true)->count(),
-                'bookmarked' => $base()->where('bookmarked', true)->count(),
-                // Awaiting review: not yet bookmarked, sealed, or held.
-                'awaiting_review' => $base()
-                    ->where('bookmarked', false)
-                    ->where('sealed', false)
-                    ->where('hold', false)
-                    ->count(),
-            ],
-        ]);
+        return response()->json(['data' => $data]);
     }
 
     /**

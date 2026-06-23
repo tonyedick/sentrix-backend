@@ -23,6 +23,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -46,7 +47,10 @@ final class CommandController extends Controller
     {
         $this->assertSuperAdmin($request);
 
-        return response()->json(['data' => $this->commands->overview()]);
+        // Cached briefly (Redis): grouped counts over command incidents.
+        $data = Cache::remember('command:overview', 30, fn () => $this->commands->overview());
+
+        return response()->json(['data' => $data]);
     }
 
     public function agencies(Request $request): AnonymousResourceCollection
