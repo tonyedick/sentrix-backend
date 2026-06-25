@@ -23,7 +23,9 @@ use Symfony\Component\HttpFoundation\Response;
  */
 final class ConsumerMediaController extends Controller
 {
-    public function __construct(private readonly VisionGuardService $vision) {}
+    public function __construct(private readonly VisionGuardService $vision)
+    {
+    }
 
     public function index(Request $request): AnonymousResourceCollection
     {
@@ -58,7 +60,7 @@ final class ConsumerMediaController extends Controller
     {
         // The issued key is namespaced by user id (media/{userId}/{uuid}); only
         // the owner may write to it.
-        abort_unless(str_starts_with($key, 'media/'.$request->user()->getKey().'/'), Response::HTTP_FORBIDDEN);
+        abort_unless(str_starts_with($key, 'media/' . $request->user()->getKey() . '/'), Response::HTTP_FORBIDDEN);
 
         Storage::disk('public')->put($key, (string) $request->getContent());
 

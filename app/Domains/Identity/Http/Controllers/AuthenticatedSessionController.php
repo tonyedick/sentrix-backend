@@ -30,7 +30,13 @@ final class AuthenticatedSessionController extends Controller
         $payload = ['user' => UserResource::make($user)];
 
         if ($data->wantsToken()) {
-            $payload['token'] = $this->auth->issueToken($user, (string) $data->deviceName)->plainTextToken;
+            // Short-lived access token + a rotating refresh token. `token` is kept
+            // as an alias of the access token for backward compatibility.
+            $pair = $this->auth->issueTokenPair($user, (string) $data->deviceName);
+            $payload['token'] = $pair['access']->plainTextToken;
+            $payload['access_token'] = $pair['access']->plainTextToken;
+            $payload['refresh_token'] = $pair['refresh']->plainTextToken;
+            $payload['expires_at'] = $pair['expires_at']->toIso8601String();
         } else {
             $this->auth->loginStateful($user, $data->remember);
             $request->session()->regenerate();

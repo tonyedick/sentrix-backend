@@ -94,6 +94,33 @@ final readonly class AuthService
     }
 
     /**
+     * Issue a short-lived access token + a long-lived refresh token.
+     *
+     * The access token carries the usual `['*']` abilities but expires quickly;
+     * the refresh token carries only `['refresh']` and is exchanged at
+     * /auth/refresh for a fresh pair (the old refresh token is rotated out).
+     *
+     * @return array{access: NewAccessToken, refresh: NewAccessToken, expires_at: \Illuminate\Support\Carbon}
+     */
+    public function issueTokenPair(User $user, string $deviceName): array
+    {
+        $refreshName = $deviceName.' (refresh)';
+
+        // One active pair per device: revoke stale access + refresh tokens.
+        $user->tokens()->whereIn('name', [$deviceName, $refreshName])->delete();
+
+        $accessTtl = (int) config('sentrix.auth.access_ttl_minutes', 60);
+        $refreshTtl = (int) config('sentrix.auth.refresh_ttl_days', 30);
+        $expiresAt = now()->addMinutes($accessTtl);
+
+        return [
+            'access' => $user->createToken($deviceName, ['*'], $expiresAt),
+            'refresh' => $user->createToken($refreshName, ['refresh'], now()->addDays($refreshTtl)),
+            'expires_at' => $expiresAt,
+        ];
+    }
+
+    /**
      * Stateful SPA login (Inertia web).
      */
     public function loginStateful(User $user, bool $remember = false): void

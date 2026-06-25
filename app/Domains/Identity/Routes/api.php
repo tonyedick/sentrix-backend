@@ -12,6 +12,7 @@ use App\Domains\Identity\Http\Controllers\OtpController;
 use App\Domains\Identity\Http\Controllers\PasswordResetLinkController;
 use App\Domains\Identity\Http\Controllers\PushTokenController;
 use App\Domains\Identity\Http\Controllers\RecentSearchController;
+use App\Domains\Identity\Http\Controllers\RefreshTokenController;
 use App\Domains\Identity\Http\Controllers\RegisteredUserController;
 use App\Domains\Identity\Http\Controllers\SafetyContactController;
 use App\Domains\Identity\Http\Controllers\SavedLocationController;
@@ -52,6 +53,12 @@ Route::prefix('v1/auth')->group(function (): void {
     // Authenticated (token or SPA session).
     Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])->name('auth.logout');
+
+        // Exchange a refresh token for a fresh access+refresh pair (rotated).
+        // Authenticated by the refresh token itself via auth:sanctum.
+        Route::post('refresh', [RefreshTokenController::class, 'store'])
+            ->middleware('throttle:auth')
+            ->name('auth.refresh');
 
         // Org-aware: `organization.team` resolves the active org (X-Organization
         // header, else the user's current_organization_id) and sets the Spatie
