@@ -16,6 +16,7 @@ use App\Domains\Incident\Support\Enums\IncidentStatus;
 use App\Domains\Organization\Models\Organization;
 use App\Domains\Responder\Models\Responder;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -45,9 +46,8 @@ final class CoreController extends Controller
      */
     public function chat(Request $request): StreamedResponse
     {
-        /** @var array<string, mixed> $body */
-        $body = $request->all();
         $user = $request->user();
+        $body = $this->buildChatBody($request, $user);
 
         $stream = $this->core->isConfigured()
             ? $this->core->chatStream($body, $user)
@@ -159,6 +159,52 @@ final class CoreController extends Controller
             'active_emergencies' => $activeEmergencies,
             'on_duty_responders' => $onDutyResponders,
         ]]);
+    }
+
+    /**
+     * Translate the client's chat payload into the shape Core expects:
+     *
+     *   { messages: [{ role, content }], system?, context: { session: {...}, lang } }
+     *
+     * The dashboard sends a single `{ message, organization_id }` turn; Core's
+     * FastAPI validates a `messages[]` array + a `context.session` (user/org/role),
+     * so we adapt here rather than leaking Core's contract to the client. A client
+     * that already sends a `messages` array (conversation history) is passed through.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildChatBody(Request $request, User $user): array
+    {
+        $messages = $request->input('messages');
+
+        if (! is_array($messages) || $messages === []) {
+            $messages = [[
+                'role' => 'user',
+                'content' => (string) $request->input('message', ''),
+            ]];
+        }
+
+        $org = $request->input('organization_id') ?? $request->header('X-Organization');
+
+        $session = array_filter([
+            'user' => (string) $user->getKey(),
+            'org' => $org,
+            'role' => $user->getRoleNames()->first(),
+        ], static fn ($value): bool => $value !== null && $value !== '');
+
+        $body = [
+            'messages' => $messages,
+            'context' => [
+                'session' => $session,
+                'lang' => (string) $request->input('lang', 'en'),
+            ],
+        ];
+
+        if ($request->filled('system')) {
+            $body['system'] = (string) $request->input('system');
+        }
+
+        return $body;
     }
 
     /**

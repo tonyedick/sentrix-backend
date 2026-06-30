@@ -21,11 +21,16 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [
+    'allowed_origins' => array_values(array_filter([
         env('DASHBOARD_URL', 'http://localhost:5173'),
-    ],
+    ])),
 
-    'allowed_origins_patterns' => [],
+    // In local development, accept any localhost/127.0.0.1 port so `npm run dev`
+    // (5173, or 5174+ when busy) and `npm run preview` (4173) all work without
+    // editing env. Production keeps the explicit allow-list above only.
+    'allowed_origins_patterns' => env('APP_ENV') === 'local'
+        ? ['#^https?://(localhost|127\.0\.0\.1)(:\d+)?$#']
+        : [],
 
     // Includes Authorization and X-Organization (the dashboard sends both).
     'allowed_headers' => ['*'],

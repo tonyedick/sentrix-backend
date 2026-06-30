@@ -27,7 +27,7 @@ final class AuditLogController extends Controller
         );
 
         $logs = AuditLog::query()
-            ->with('user')
+            ->with('actor')
             ->where('organization_id', $organization->getKey())
             ->when(
                 $request->filled('action'),

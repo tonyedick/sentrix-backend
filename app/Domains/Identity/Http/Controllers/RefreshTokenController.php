@@ -44,8 +44,11 @@ final class RefreshTokenController extends Controller
             $deviceName = 'api';
         }
 
-        // issueTokenPair revokes the old access + refresh tokens for this device
-        // name before minting the new pair — i.e. the used refresh token is rotated.
+        // Rotate: explicitly revoke the presented refresh token (delete by primary
+        // key) so it can never be replayed, then mint a fresh access+refresh pair.
+        // issueTokenPair additionally clears the stale access token for this device.
+        $token->delete();
+
         $pair = $this->auth->issueTokenPair($user, $deviceName);
 
         return response()->json([

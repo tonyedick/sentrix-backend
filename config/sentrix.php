@@ -184,6 +184,10 @@ return [
         'social' => [
             'driver' => env('SENTRIX_SOCIAL_DRIVER', 'stub'),
         ],
+        // Dashboard token lifecycle: short-lived access token + a long-lived
+        // refresh token (rotated, single-use on /auth/refresh). Tune per env.
+        'access_ttl_minutes' => (int) env('SANCTUM_ACCESS_TTL_MINUTES', 60),
+        'refresh_ttl_days' => (int) env('SANCTUM_REFRESH_TTL_DAYS', 30),
     ],
 
     /*
@@ -464,22 +468,6 @@ return [
 
     'rides' => [
         'referral_reward_cents' => (int) env('SENTRIX_RIDES_REFERRAL_REWARD_CENTS', 100000),
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Auth — token lifecycle
-    |--------------------------------------------------------------------------
-    |
-    | Short-lived access token + long-lived refresh token (rotated on use). The
-    | access token expires quickly so a stolen one dies fast; the refresh token
-    | is single-use (rotated) so a stolen+used one is invalidated. Tune per env.
-    |
-    */
-
-    'auth' => [
-        'access_ttl_minutes' => (int) env('SANCTUM_ACCESS_TTL_MINUTES', 60),
-        'refresh_ttl_days' => (int) env('SANCTUM_REFRESH_TTL_DAYS', 30),
     ],
 
 ];

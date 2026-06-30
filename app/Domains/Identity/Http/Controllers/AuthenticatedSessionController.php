@@ -54,8 +54,12 @@ final class AuthenticatedSessionController extends Controller
         $token = $user?->currentAccessToken();
 
         if ($token instanceof PersonalAccessToken) {
-            // Bearer-token client (mobile): revoke just this token.
-            $token->delete();
+            // Bearer-token client (mobile/dashboard): revoke the whole device pair
+            // (access token + its paired refresh token), not just the presented
+            // token, so logout fully ends the session and leaves no refresh token
+            // behind that could mint new access tokens.
+            $base = (string) preg_replace('/\s*\(refresh\)$/', '', (string) $token->name);
+            $user?->tokens()->whereIn('name', [$base, $base.' (refresh)'])->delete();
         } else {
             // Stateful SPA session (web): tear the session down.
             auth('web')->logout();

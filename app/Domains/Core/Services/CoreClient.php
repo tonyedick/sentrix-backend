@@ -117,23 +117,87 @@ final readonly class CoreClient
     }
 
     /**
-     * The user's effective scope list as a comma-joined string. Prefers granular
-     * permission names; falls back to role names when no permissions resolve
-     * (the Core agent gates tools on scopes, see SENTRIX_INTEGRATION.md).
+     * The user's effective Core tool-scope list as a comma-joined string.
+     *
+     * Core enforces least-privilege using its own `domain:verb` scope vocabulary
+     * (e.g. `emergency:dispatch`, `omni:incident`), which differs from the
+     * backend's Spatie `domain.verb` permission names. We translate here so the
+     * `X-Sentrix-Scopes` header carries scopes Core actually understands.
+     * SuperAdmin gets the `*` wildcard (Core bypasses per-tool scopes for it).
      */
     private function scopesFor(User $user): string
     {
-        $permissions = $user->getAllPermissions()
-            ->pluck('name')
-            ->filter()
-            ->values();
+        $isSuperAdmin = method_exists($user, 'isSuperAdmin')
+            ? $user->isSuperAdmin()
+            : $user->hasRole('SuperAdmin');
 
-        $scopes = $permissions->isNotEmpty()
-            ? $permissions
-            : $user->getRoleNames();
+        $permissions = $user->getAllPermissions()->pluck('name')->filter()->all();
 
-        return $scopes->implode(',');
+        return implode(',', self::coreScopesFor($permissions, $isSuperAdmin));
     }
+
+    /**
+     * Map backend permission names to the set of Core tool scopes they grant.
+     *
+     * Pure + static so it is unit-testable without the auth stack. SuperAdmin
+     * short-circuits to `['*']`. Backend permissions with no operator-relevant
+     * Core tool (consumer/mobile/platform-only scopes) are intentionally not
+     * granted to non-SuperAdmins — least privilege.
+     *
+     * @param  list<string>  $permissionNames
+     * @return list<string>
+     */
+    public static function coreScopesFor(array $permissionNames, bool $isSuperAdmin): array
+    {
+        if ($isSuperAdmin) {
+            return ['*'];
+        }
+
+        $scopes = [];
+        foreach ($permissionNames as $permission) {
+            foreach (self::PERMISSION_TO_CORE_SCOPES[$permission] ?? [] as $scope) {
+                $scopes[$scope] = true;
+            }
+        }
+
+        return array_keys($scopes);
+    }
+
+    /**
+     * Backend permission (Spatie `domain.verb`) → Core tool scopes (`domain:verb`).
+     * Only operator-relevant correspondences are mapped; see CoreClient::coreScopesFor.
+     *
+     * @var array<string, list<string>>
+     */
+    private const PERMISSION_TO_CORE_SCOPES = [
+        'incidents.view' => ['omni:read', 'omni:query', 'seccmd:read', 'alert:read', 'memory:write'],
+        'incidents.create' => ['omni:incident'],
+        'incidents.update' => ['omni:respond', 'alert:respond'],
+        'incidents.escalate' => ['emergency:escalate'],
+        'evidence.view' => ['evidence:read', 'camera:read', 'omni:query'],
+        'evidence.hold' => ['evidence:record'],
+        'evidence.ingest' => ['evidence:record'],
+        'assignments.view' => ['seccmd:read'],
+        'assignments.dispatch' => ['emergency:dispatch', 'seccmd:respond'],
+        'responders.assign' => ['emergency:dispatch'],
+        'emergencies.view' => ['alert:read'],
+        'emergencies.trigger' => ['emergency:sos'],
+        'intel.view' => ['intel:predict', 'omni:analyze', 'hq:read', 'alert:read'],
+        'intel.export' => ['intel:report'],
+        'audit.view' => ['report:read'],
+        'storage.view' => ['report:read'],
+        'tracking.view' => ['fleet:locate', 'fleet:read'],
+        'insurance.policies.view' => ['insurance:read'],
+        'insurance.risk' => ['insurance:risk'],
+        'insurance.quote' => ['insurance:quote'],
+        'insurance.claims.file' => ['insurance:claim'],
+        'hardware.view' => ['device:read'],
+        'hardware.register' => ['device:register'],
+        'passes.view' => ['access:read'],
+        'passes.issue' => ['access:pass'],
+        'passes.manage' => ['access:pass'],
+        'gate.scan' => ['access:scan'],
+    ];
 
     /**
      * @return array<string, mixed>

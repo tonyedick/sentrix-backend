@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domains\Core\Http\Controllers\CoreController;
+use App\Domains\Core\Http\Controllers\CoreToolGatewayController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -28,4 +29,13 @@ Route::middleware(['core.service'])
     ->prefix('v1/core')
     ->group(function (): void {
         Route::post('events', [CoreController::class, 'events'])->name('core.events');
+    });
+
+// SentrixCore agent tool gateway: Core's tools POST to {base}/api/tools/{name}
+// (the Omni tool contract). Authed by X-Service-Token (core.service). The `tools`
+// prefix (no `v1/core`) matches Core's OmniAPI client path exactly.
+Route::middleware(['core.service'])
+    ->prefix('tools')
+    ->group(function (): void {
+        Route::post('{tool}', [CoreToolGatewayController::class, 'invoke'])->name('core.tools.invoke');
     });

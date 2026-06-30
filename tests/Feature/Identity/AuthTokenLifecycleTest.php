@@ -55,6 +55,9 @@ final class AuthTokenLifecycleTest extends TestCase
     {
         $data = $this->login();
         $oldRefresh = $data['refresh_token'];
+        // Sanctum plaintext tokens are "<id>|<secret>"; the id lets us assert the
+        // row is gone independently of the auth guard.
+        $oldRefreshId = (int) explode('|', $oldRefresh, 2)[0];
 
         $rotated = $this->withToken($oldRefresh)
             ->postJson('/api/v1/auth/refresh')
@@ -64,10 +67,17 @@ final class AuthTokenLifecycleTest extends TestCase
 
         $this->assertNotSame($oldRefresh, $rotated['refresh_token']);
 
-        // The new access token works...
+        // Rotation: the used refresh token is deleted from the database entirely.
+        $this->assertDatabaseMissing('personal_access_tokens', ['id' => $oldRefreshId]);
+
+        // The new access token works. Reset the guard first so the bearer token is
+        // re-validated rather than reusing the user cached from the call above
+        // (feature tests share one app instance, so Sanctum caches the resolution).
+        $this->app['auth']->forgetGuards();
         $this->withToken($rotated['access_token'])->getJson('/api/v1/auth/me')->assertOk();
 
-        // ...and the used refresh token is rotated out — it no longer authenticates.
+        // The rotated-out refresh token no longer authenticates.
+        $this->app['auth']->forgetGuards();
         $this->withToken($oldRefresh)->postJson('/api/v1/auth/refresh')->assertUnauthorized();
     }
 

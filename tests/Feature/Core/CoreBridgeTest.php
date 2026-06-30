@@ -101,6 +101,39 @@ final class CoreBridgeTest extends TestCase
         $this->assertStringContainsString('data: [DONE]', $body);
     }
 
+    public function test_chat_translates_the_simple_payload_into_cores_message_shape(): void
+    {
+        config(['sentrix.core.endpoint' => 'http://core.test', 'sentrix.core.api_key' => 'svc-secret']);
+
+        Http::fake([
+            'core.test/api/core/chat' => Http::response(
+                "data: {\"text\":\"Hello operator\"}\n\ndata: [DONE]\n\n",
+                200,
+                ['Content-Type' => 'text/event-stream'],
+            ),
+        ]);
+
+        $user = $this->superAdmin();
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/core/chat', ['message' => 'status please', 'organization_id' => 'acme']);
+
+        $response->assertOk();
+        $this->assertStringContainsString('Hello operator', $response->streamedContent());
+
+        // The dashboard's flat {message, organization_id} must reach Core as a
+        // {messages:[{role,content}], context:{session:{user,org}}} payload.
+        Http::assertSent(function ($request) use ($user): bool {
+            return $request->url() === 'http://core.test/api/core/chat'
+                && $request->hasHeader('X-Service-Token', 'svc-secret')
+                && is_array($request['messages'])
+                && ($request['messages'][0]['role'] ?? null) === 'user'
+                && ($request['messages'][0]['content'] ?? null) === 'status please'
+                && ($request['context']['session']['user'] ?? null) === (string) $user->getKey()
+                && ($request['context']['session']['org'] ?? null) === 'acme';
+        });
+    }
+
     // ----- /events ------------------------------------------------------------
 
     public function test_events_broadcasts_and_returns_accepted(): void
